@@ -5,7 +5,7 @@
 import { base64FromBytes, errorMessage, json, options } from "../_shared/http.ts";
 import { requireMember } from "../_shared/supa.ts";
 import { structured } from "../_shared/anthropic.ts";
-import { DOCUMENT_SCHEMA, DOCUMENT_SYSTEM, PROTOCOL_SCHEMA, PROTOCOL_SYSTEM } from "../_shared/extractSchemas.ts";
+import { DOCUMENT_SCHEMA, DOCUMENT_SYSTEM, PROTOCOL_SCHEMA, PROTOCOL_SYSTEM, fieldsToData } from "../_shared/extractSchemas.ts";
 
 function mimeOf(path: string, fallback?: string): string {
   const p = path.toLowerCase();
@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
         type: "text",
         text: `Protokolltag laut App: ${body.day || "unbekannt"}. Aktuelle Medikamente im Plan: ${names.join(", ") || "keine"}.${care ? ` Pflegehinweise und Begriffe der Familie: ${care}.` : ""} Bitte alle Zeilen übertragen.`,
       });
-      const result = await structured({
+      const raw = await structured<{ eintraege?: Array<Record<string, unknown>> } & Record<string, unknown>>({
         system: PROTOCOL_SYSTEM,
         content,
         toolName: "eintraege_speichern",
@@ -59,7 +59,12 @@ Deno.serve(async (req) => {
         schema: PROTOCOL_SCHEMA,
         maxTokens: 12000,
       });
-      return json({ ok: true, result });
+      // Paare (felder) in das Datenobjekt umwandeln, das die App erwartet.
+      const eintraege = (Array.isArray(raw?.eintraege) ? raw.eintraege : []).map((e) => {
+        const { felder, data, ...rest } = e;
+        return { ...rest, data: data && typeof data === "object" && !Array.isArray(data) ? data : fieldsToData(felder) };
+      });
+      return json({ ok: true, result: { ...raw, eintraege } });
     }
 
     content.push({ type: "text", text: "Bitte das Dokument für die Akte auswerten." });

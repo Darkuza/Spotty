@@ -11,6 +11,7 @@ import { LoginView, NoAccess, Splash, Brand } from "./features/LoginView";
 import { TodayView } from "./features/today/TodayView";
 import { LogView } from "./features/log/LogView";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
+import { isFreshFor } from "./lib/fresh";
 import { SettingsSheet } from "./features/settings/SettingsSheet";
 import { EmergencySheet } from "./features/EmergencySheet";
 import { daysBetween, minutesOf } from "@shared/dates.ts";
@@ -120,9 +121,8 @@ function saveSeen(v: number) {
   }
 }
 
-/** Einträge und Fotos, die andere seit `since` angelegt haben. */
-function freshByOthers<T extends { created_by?: string | null; created_at?: string }>(rows: T[], me: string | null | undefined, since: number): T[] {
-  return rows.filter((r) => !!r.created_by && r.created_by !== me && Date.parse(r.created_at || "") > since);
+function freshByOthers<T extends Parameters<typeof isFreshFor>[0]>(rows: T[], me: string | null | undefined, since: number): T[] {
+  return rows.filter((r) => isFreshFor(r, me, since));
 }
 
 /** Anzahl der heute seit mehr als 20 Minuten offenen Planpunkte (Medikamente, Pflege, Messungen). */

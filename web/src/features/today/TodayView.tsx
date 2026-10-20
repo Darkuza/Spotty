@@ -15,7 +15,9 @@ import { uploadProtocolPhoto } from "../../lib/photos";
 import { clinicPhone } from "../../lib/profile";
 import { SetupCard } from "./SetupCard";
 import { saveRegimen } from "../../lib/data";
-import { addDays, fmtDMY, isValidDay, isValidHm } from "@shared/dates.ts";
+import { addDays, berlinNow, fmtDMY, isValidDay, isValidHm } from "@shared/dates.ts";
+import { store } from "../../lib/store";
+import { amountOf } from "../../lib/dose";
 
 type Status = "done" | "now" | "over" | "future" | "past";
 
@@ -151,12 +153,17 @@ export function TodayView({ day, now, onDay, onGoto }: { day: string; now: Berli
         </div>
       )}
 
-      {old.length && hero !== old[0] ? (
+      {old.some((x) => x !== hero) ? (
         <div className="banner warn">
           <div className="head">
             <Icon name="alert" size={20} /> Noch offen
           </div>
-          <p>{old.map((x) => `${x.it.time} ${x.it.title}`).join(" · ")}</p>
+          <p>
+            {old
+              .filter((x) => x !== hero)
+              .map((x) => `${x.it.time} ${x.it.title}`)
+              .join(" · ")}
+          </p>
           {old.some((x) => x.it.kind === "check") ? (
             <div className="row">
               <button className="btn small ghost" onClick={() => sheets.open((close) => <CatchUpSheet day={day} items={old.filter((x) => x.it.kind === "check").map((x) => x.it)} onClose={close} />)}>
@@ -426,10 +433,28 @@ function MedsCard({ regimens, day }: { regimens: Regimen[]; day: string }) {
 function CatchUpSheet({ day, items, onClose }: { day: string; items: PlanItem[]; onClose: () => void }) {
   const toast = useToast();
   const [rows, setRows] = useState(() => items.map((it) => ({ it, on: true, time: it.time })));
+  const [error, setError] = useState<string | null>(null);
   const count = rows.filter((r) => r.on && isValidHm(r.time)).length;
   const save = () => {
-    for (const r of rows) if (r.on && isValidHm(r.time)) checkItem(day, r.it.slot, r.time);
-    toast.show(`${count} ${count === 1 ? "Punkt" : "Punkte"} nachgetragen`);
+    const now = berlinNow();
+    const future = rows.find((r) => r.on && isValidHm(r.time) && day === now.day && minutesOf(r.time) > now.minutes);
+    if (future) {
+      setError(`${future.it.title}: ${future.time} Uhr liegt noch in der Zukunft. Bitte die Uhrzeit prüfen.`);
+      return;
+    }
+    let saved = 0;
+    let skipped = 0;
+    for (const r of rows) {
+      if (!r.on || !isValidHm(r.time)) continue;
+      // Hat jemand anderes den Punkt inzwischen abgehakt, bleibt dessen Eintrag stehen.
+      if (store.find<Check>("checks", { day, slot: r.it.slot })) {
+        skipped++;
+        continue;
+      }
+      checkItem(day, r.it.slot, r.time);
+      saved++;
+    }
+    toast.show(`${saved} ${saved === 1 ? "Punkt" : "Punkte"} nachgetragen${skipped ? ` · ${skipped} hatte schon jemand abgehakt` : ""}`);
     onClose();
   };
   return (
@@ -448,6 +473,11 @@ function CatchUpSheet({ day, items, onClose }: { day: string; items: PlanItem[];
       }
     >
       <p className="hint">Vorgabe ist die Planzeit. Abweichende Uhrzeiten bitte anpassen; was nicht gegeben wurde, abwählen.</p>
+      {error ? (
+        <p className="hint" style={{ color: "var(--danger)", fontWeight: 600 }}>
+          {error}
+        </p>
+      ) : null}
       <div className="card flush">
         {rows.map((r, i) => (
           <div key={r.it.slot} className="erow" style={{ gridTemplateColumns: "28px minmax(0,1fr) 112px", alignItems: "center" }}>
@@ -490,10 +520,10 @@ function StartSheet({ regimen, onClose }: { regimen: Regimen; onClose: () => voi
   const [dose, setDose] = useState(regimen.unit && /h[uü]b/i.test(regimen.unit) ? "1 Hub" : "");
   const n = parseInt(days, 10);
   const valid = isValidDay(from) && (open || (n >= 1 && n <= 365));
-  const to = !open && n >= 1 ? addDays(from, n - 1) : null;
+  const to = valid && !open ? addDays(from, n - 1) : null;
   const save = () => {
     if (!valid) return;
-    saveRegimen({ ...regimen, steps: [{ from, to, dose: dose.trim() || null, label: null, amount: 1, pattern: "daily" }] });
+    saveRegimen({ ...regimen, steps: [{ from, to, dose: dose.trim() || null, label: null, amount: amountOf(dose, regimen.unit), pattern: "daily" }] });
     toast.show(`${regimen.name} beginnt am ${fmtDMY(from)}`);
     onClose();
   };

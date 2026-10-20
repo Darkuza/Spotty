@@ -78,8 +78,15 @@ export function StatsView({ now, onAsk }: { now: BerlinNow; onAsk: (prompt: stri
   const weights = weightPoints.sort((a, b) => a.day.localeCompare(b.day));
   const lastW = weights[weights.length - 1];
   const firstW = weights[0];
-  const fluidDays = fluids.filter((v): v is number => v != null);
-  const foodDays = foods.filter((v): v is number => v != null);
+  // Durchschnitt nur über abgeschlossene Tage; der laufende Tag zählt erst ab morgen mit.
+  const isNum = (v: number | null | undefined): v is number => v != null;
+  const fluidDays = fluids.filter((_v, i) => days[i] < now.day).filter(isNum);
+  const foodDays = foods.filter((_v, i) => days[i] < now.day).filter(isNum);
+  const fluidToday = days[days.length - 1] === now.day ? fluids[fluids.length - 1] : null;
+  const foodToday = days[days.length - 1] === now.day ? foods[foods.length - 1] : null;
+  const avgText = (xs: number[], today: number | null | undefined) => (xs.length ? fmtNum(xs.reduce((a, b) => a + b, 0) / xs.length) : today != null ? fmtNum(today) : "–");
+  const avgNote = (xs: number[], today: number | null | undefined) =>
+    xs.length ? `${xs.length} ${xs.length === 1 ? "Tag" : "Tage"} mit Angabe, ohne heute` : today != null ? "nur heute, bis jetzt" : "keine Angaben";
   let planTotal = 0;
   let planDone = 0;
   for (const d of days) {
@@ -180,18 +187,18 @@ export function StatsView({ now, onAsk }: { now: BerlinNow; onAsk: (prompt: stri
         <div className="kpi">
           <div className="k">Trinken, Ø pro Tag</div>
           <div className="v num">
-            {fluidDays.length ? fmtNum(fluidDays.reduce((a, b) => a + b, 0) / fluidDays.length) : "–"}
+            {avgText(fluidDays, fluidToday)}
             <small>ml</small>
           </div>
-          <div className="d">{fluidDays.length ? `${fluidDays.length} ${fluidDays.length === 1 ? "Tag" : "Tage"} mit Angabe` : "keine Angaben"}</div>
+          <div className="d">{avgNote(fluidDays, fluidToday)}</div>
         </div>
         <div className="kpi">
           <div className="k">Futter, Ø pro Tag</div>
           <div className="v num">
-            {foodDays.length ? fmtNum(foodDays.reduce((a, b) => a + b, 0) / foodDays.length) : "–"}
+            {avgText(foodDays, foodToday)}
             <small>g</small>
           </div>
-          <div className="d">{foodDays.length ? `${foodDays.length} ${foodDays.length === 1 ? "Tag" : "Tage"} mit Angabe` : "keine Angaben"}</div>
+          <div className="d">{avgNote(foodDays, foodToday)}</div>
         </div>
         <div className="kpi">
           <div className="k">SpO₂, niedrigster Wert</div>

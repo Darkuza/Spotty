@@ -137,9 +137,17 @@ export function AssistantView({ prompt, onPromptUsed }: { prompt: string | null;
     }
   };
 
-  const openThread = (t: Thread) => setLive({ thread: t.id, messages: t.messages, streaming: null, error: null });
+  // Vorschaubilder der laufenden Unterhaltung freigeben, wenn sie verlassen wird.
+  const releasePhotos = () => {
+    for (const m of live.messages) if (m.image?.url) URL.revokeObjectURL(m.image.url);
+  };
+  const openThread = (t: Thread) => {
+    if (t.id !== live.thread) releasePhotos();
+    setLive({ thread: t.id, messages: t.messages, streaming: null, error: null });
+  };
   const newChat = () => {
     abortRef.current?.abort();
+    releasePhotos();
     setLive({ thread: newId(), messages: [], streaming: null, error: null });
   };
 

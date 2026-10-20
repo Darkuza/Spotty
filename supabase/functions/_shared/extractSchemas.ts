@@ -8,7 +8,7 @@ export const LAB_CODES =
 export const PROTOCOL_SYSTEM = `Du liest das Foto eines handschriftlichen Tagesprotokolls über einen kranken Hund und überträgst jede Zeile in strukturierte Einträge.
 Regeln:
 - Übertrage nur, was auf dem Blatt steht. Nichts ergänzen, nichts schätzen. Unleserliches als "unsicher": true markieren und in "hinweise" nennen.
-- Uhrzeit "HH:MM"; bei Zeitspannen (10:30–11:15) den Beginn nehmen und die Spanne in data.text vermerken.
+- Uhrzeit "HH:MM"; bei Zeitspannen (10:30–11:15) den Beginn nehmen und die Spanne im Feld text vermerken.
 - Eine Zeile kann mehrere Einträge ergeben (z. B. Wasser und Tablette).
 - Typen und Felder:
   trinken: {"ml": Zahl, "art": "Wasser"|"Hühnerbrühe"|"Leberwurstwasser"|"Milch-Wasser"|"Sonstiges", "weg": "spritze"|"selbst"}  (Spritze/Oralspritze/Kanüle = spritze; aus Schale/Napf selbst = selbst)
@@ -22,7 +22,8 @@ Regeln:
   spo2: {"pct": Zahl, "puls": Zahl}
   gewicht: {"kg": Zahl}
   notiz: {"tags": [], "text": Beobachtung}
-  Zu jedem Eintrag darf data.text eine kurze Ergänzung enthalten.
+  Zu jedem Eintrag darf das Feld text eine kurze Ergänzung enthalten.
+- Die Felder eines Eintrags gibst du in "felder" als Liste von Paaren an: {"k": Feldname, "v": Wert als Text}. Zahlen als Text ohne Einheit ("45", "2,5"), Listen (auff, tags) als Text mit Komma getrennt. Beispiel Trinken: [{"k":"ml","v":"20"},{"k":"art","v":"Wasser"},{"k":"weg","v":"spritze"}]. Nur Felder angeben, die auf dem Blatt stehen.
 - Medikamente (Tabletten, Pulver, Säfte, Sprays, Inhalation) NICHT als Eintrag, sondern in "medikamente" mit Uhrzeit, Name und Menge – die App gleicht sie mit dem Behandlungsplan ab.
 - Abkürzungen: TL = Teelöffel, Tbl. = Tablette, ml = Milliliter, „Schmerz“ = Schmerzmittel, „Übelkeit“ = Mittel gegen Übelkeit. Eigene Begriffe der Familie stehen in den Pflegehinweisen, die mit dem Foto mitgeschickt werden.`;
 
@@ -37,24 +38,62 @@ Regeln:
 
 // Schemata für Structured Outputs: jedes Objekt mit additionalProperties false, feste Felder.
 const S = { type: "string" } as const;
-const N = { type: "number" } as const;
 const SA = { type: "array", items: { type: "string" } } as const;
 
-/** Felder aller Eintragsarten; je Eintrag werden nur die passenden gesetzt. */
-const ENTRY_DATA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    ml: N, art: S, weg: S, g: N, menge: S, reaktion: S,
-    form: S, farbe: S, auff: SA,
-    min: N, langsam: N, energie: S, atemDanach: S,
-    inhalt: S, blut: S, anzahl: N,
-    bpm: N, zustand: S, o2: S, lage: S, untergrund: S,
-    pct: N, puls: N, pulsOk: S, stelle: S,
-    kg: N, name: S, dosis: S, grund: S,
-    tags: SA, text: S,
+/** Feldnamen aller Eintragsarten. Die Felder kommen als Paare (k, v), damit das Schema ohne optionale Felder auskommt
+ *  (Structured Outputs erlaubt höchstens 24 optionale Felder und 16 Felder mit Vereinigungstypen je Anfrage). */
+export const FIELD_KEYS = [
+  "ml", "art", "weg", "g", "menge", "reaktion",
+  "form", "farbe", "auff",
+  "min", "langsam", "energie", "atemDanach",
+  "inhalt", "blut", "anzahl",
+  "bpm", "zustand", "o2", "lage", "untergrund",
+  "pct", "puls", "pulsOk", "stelle",
+  "kg", "name", "dosis", "grund",
+  "tags", "text",
+];
+const NUM_KEYS = new Set(["ml", "g", "min", "langsam", "anzahl", "bpm", "pct", "puls", "kg"]);
+const LIST_KEYS = new Set(["auff", "tags"]);
+
+const ENTRY_FIELDS = {
+  type: "array",
+  description: "Felder des Eintrags als Paare",
+  items: {
+    type: "object",
+    additionalProperties: false,
+    properties: { k: { type: "string", enum: FIELD_KEYS }, v: S },
+    required: ["k", "v"],
   },
 };
+
+/** Wandelt die Paare aus dem Auslesen in das Datenobjekt eines Eintrags (Zahlen als Zahl, Listen als Liste). */
+export function fieldsToData(felder: unknown): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const extra: string[] = [];
+  if (!Array.isArray(felder)) return out;
+  for (const f of felder) {
+    if (!f || typeof f !== "object") continue;
+    const k = String((f as Record<string, unknown>).k ?? "").trim();
+    const raw = (f as Record<string, unknown>).v;
+    const v = raw === null || raw === undefined ? "" : String(raw).trim();
+    if (!k || !v || !FIELD_KEYS.includes(k)) continue;
+    if (NUM_KEYS.has(k)) {
+      const m = /-?\d+(?:[.,]\d+)?/.exec(v);
+      const n = m ? Number(m[0].replace(",", ".")) : NaN;
+      if (isFinite(n)) {
+        out[k] = n;
+        if (m && v !== m[0]) extra.push(`${k}: ${v}`);
+      } else extra.push(`${k}: ${v}`);
+    } else if (LIST_KEYS.has(k)) {
+      const list = v.split(/[,;]/).map((x) => x.trim()).filter(Boolean);
+      out[k] = [...new Set([...((out[k] as string[]) || []), ...list])];
+    } else if (k === "text") {
+      out.text = out.text ? `${out.text} · ${v}` : v;
+    } else out[k] = v;
+  }
+  if (extra.length) out.text = [out.text, ...extra].filter(Boolean).join(" · ");
+  return out;
+}
 
 export const PROTOCOL_SCHEMA = {
   type: "object",
@@ -69,11 +108,11 @@ export const PROTOCOL_SCHEMA = {
         properties: {
           time: { type: "string", description: "HH:MM" },
           type: { type: "string", enum: ENTRY_TYPES },
-          data: ENTRY_DATA,
+          felder: ENTRY_FIELDS,
           original: { type: "string", description: "Zeile wie auf dem Blatt" },
           unsicher: { type: "boolean" },
         },
-        required: ["time", "type", "data", "original", "unsicher"],
+        required: ["time", "type", "felder", "original", "unsicher"],
       },
     },
     medikamente: {

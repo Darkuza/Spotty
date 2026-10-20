@@ -143,8 +143,7 @@ export function clinicReport(d: ClinicReportData, from: string, to: string, now:
   const age = p.born ? ageAt(p.born, to) : null;
   const head = [p.species, p.breed, p.sex, p.born ? `geb. ${fmtDMY(p.born)}${age ? ` (${age.years} J.)` : ""}` : ""].filter(Boolean).join(", ");
   if (head) L.push(head);
-  const allergy = (p.allergies || []).find((a) => a.items?.length);
-  if (allergy) {
+  for (const allergy of (p.allergies || []).filter((a) => a.items?.length)) {
     const items = [...new Set(allergy.items.filter(Boolean))];
     const shown = items.slice(0, 12);
     L.push(`Unverträglichkeiten${allergy.source ? ` laut ${allergy.source}` : ""}: ${shown.join(", ")}${items.length > shown.length ? ` und ${items.length - shown.length} weitere` : ""}`);
@@ -159,23 +158,30 @@ export function clinicReport(d: ClinicReportData, from: string, to: string, now:
   interface RegSum {
     name: string;
     inh: boolean;
+    paused: boolean;
     planned: number;
     given: number;
     missed: string[];
     segs: { dose: string; from: string }[];
   }
+  // Pausierte Pläne zählen mit, soweit im Zeitraum tatsächlich abgehakt wurde.
+  const paused = new Set(d.regimens.filter((r) => !r.active).map((r) => r.id));
+  const allRegs = d.regimens.map((r) => (r.active ? r : { ...r, active: true }));
   const byReg = new Map<string, RegSum>();
   for (const day of days) {
-    for (const it of itemsForDay(d.regimens, day)) {
+    for (const it of itemsForDay(allRegs, day)) {
       if (it.kind !== "check" || (it.category !== "med" && it.category !== "inh")) continue;
+      const isPaused = paused.has(it.regimenId);
+      const done = itemState(it, day, d.checks, d.entries, d.photos).done;
+      if (isPaused && !done) continue;
       const reg = d.regimens.find((r) => r.id === it.regimenId);
-      if (!byReg.has(it.regimenId)) byReg.set(it.regimenId, { name: reg?.name || it.title, inh: it.category === "inh", planned: 0, given: 0, missed: [], segs: [] });
+      if (!byReg.has(it.regimenId)) byReg.set(it.regimenId, { name: reg?.name || it.title, inh: it.category === "inh", paused: isPaused, planned: 0, given: 0, missed: [], segs: [] });
       const r = byReg.get(it.regimenId)!;
       const dose = it.dose || "";
       if (!r.segs.length || r.segs[r.segs.length - 1].dose !== dose) r.segs.push({ dose, from: day });
-      if (day === now.day && minutesOf(it.time) > minutesOf(now.hm)) continue;
+      if (!done && day === now.day && minutesOf(it.time) > minutesOf(now.hm)) continue;
       r.planned++;
-      if (itemState(it, day, d.checks, d.entries, d.photos).done) r.given++;
+      if (done) r.given++;
       else r.missed.push(`${dm(day)} ${it.time}`);
     }
   }
@@ -183,9 +189,13 @@ export function clinicReport(d: ClinicReportData, from: string, to: string, now:
   for (const r of byReg.values()) {
     const doses = r.segs.filter((s) => s.dose);
     const doseText = doses.length === 1 && r.segs.length === 1 ? ` ${doses[0].dose}` : doses.length ? `: ${doses.map((s) => `${s.dose} ab ${dm(s.from)}`).join(", ")}` : "";
-    const unit = r.inh ? (r.planned === 1 ? "Anwendung" : "Anwendungen") : r.planned === 1 ? "Gabe" : "Gaben";
+    const unitOf = (n: number) => (r.inh ? (n === 1 ? "Anwendung" : "Anwendungen") : n === 1 ? "Gabe" : "Gaben");
+    if (r.paused) {
+      treat.push(`- ${r.name}${doseText} – derzeit pausiert; im Zeitraum ${r.given} ${unitOf(r.given)} abgehakt`);
+      continue;
+    }
     const missed = r.missed.length ? (r.missed.length <= 4 ? `; nicht abgehakt: ${r.missed.join(", ")}` : `; ${r.missed.length} nicht abgehakt`) : "";
-    treat.push(`- ${r.name}${doseText} – ${r.given} von ${r.planned} ${unit} abgehakt${missed}`);
+    treat.push(`- ${r.name}${doseText} – ${r.given} von ${r.planned} ${unitOf(r.planned)} abgehakt${missed}`);
   }
   for (const e of d.entries.filter((x) => x.type === "med" && x.day >= from && x.day <= to).sort((a, b) => (a.day + a.time).localeCompare(b.day + b.time)))
     treat.push(`- zusätzlich ${dm(e.day)} ${e.time}: ${summarize(e)}`);
@@ -260,10 +270,17 @@ export function clinicReport(d: ClinicReportData, from: string, to: string, now:
   const pain = stats.reduce((n, s) => n + s.schmerz, 0);
   if (fl.length || fo.length || refused || pain) {
     L.push("", "Trinken und Futter");
-    const avg = (xs: number[]) => fmtNum(xs.reduce((a, b) => a + b, 0) / xs.length);
-    const list = <T extends { day: string }>(xs: T[], v: (x: T) => string) => (xs.length <= 14 ? `: ${xs.map((x) => `${dm(x.day)} ${v(x)}`).join(" · ")}` : "");
-    if (fl.length) L.push(`- Trinken Ø ${avg(fl.map((x) => x.ml as number))} ml pro Tag (${fl.length} ${fl.length === 1 ? "Tag" : "Tage"} mit Angabe)${list(fl, (x) => `${fmtNum(x.ml)} ml`)}`);
-    if (fo.length) L.push(`- Futter Ø ${avg(fo.map((x) => x.g as number))} g pro Tag (${fo.length} ${fo.length === 1 ? "Tag" : "Tage"} mit Angabe)${list(fo, (x) => `${fmtNum(x.g)} g`)}`);
+    // Der laufende Tag ist unvollständig und bleibt aus dem Durchschnitt heraus.
+    const line = <T extends { day: string }>(label: string, unit: string, xs: T[], val: (x: T) => number) => {
+      const full = xs.filter((x) => x.day !== now.day);
+      const today = xs.find((x) => x.day === now.day);
+      const list = xs.length <= 14 ? `: ${xs.map((x) => `${dm(x.day)} ${fmtNum(val(x))} ${unit}${x.day === now.day ? " (bis jetzt)" : ""}`).join(" · ")}` : "";
+      if (!full.length) return `- ${label} heute bis ${now.hm} Uhr: ${fmtNum(today ? val(today) : 0)} ${unit}`;
+      const avg = full.reduce((a, x) => a + val(x), 0) / full.length;
+      return `- ${label} Ø ${fmtNum(avg)} ${unit} pro Tag (${full.length} ${full.length === 1 ? "abgeschlossener Tag" : "abgeschlossene Tage"} mit Angabe)${list}`;
+    };
+    if (fl.length) L.push(line("Trinken", "ml", fl, (x) => x.ml as number));
+    if (fo.length) L.push(line("Futter", "g", fo, (x) => x.g as number));
     if (refused || pain) L.push(`- ${[refused ? `${refused}× Futter abgelehnt` : "", pain ? `${pain}× Schmerzreaktion beim oder nach dem Fressen` : ""].filter(Boolean).join(", ")}`);
   }
 
@@ -274,19 +291,20 @@ export function clinicReport(d: ClinicReportData, from: string, to: string, now:
     const isEvent = e.type === "erbrechen" || e.type === "husten";
     if ((a && a.level !== "info") || isEvent) notable.push(`- ${dm(e.day)} ${e.time} ${TYPES[e.type]?.short || e.type}: ${summarize(e)}`);
   }
-  if (notable.length) L.push("", "Auffälligkeiten", ...notable.slice(-25), ...(notable.length > 25 ? [`(${notable.length - 25} ältere nicht aufgeführt)`] : []));
+  if (notable.length) L.push("", "Auffälligkeiten", ...(notable.length > 25 ? [`(${notable.length - 25} ältere nicht aufgeführt)`] : []), ...notable.slice(-25));
 
-  // Beobachtungen, Nächte, Tagesnotizen
-  const obs: string[] = [];
-  for (const e of d.entries.filter((x) => x.type === "notiz" && x.day >= from && x.day <= to).sort((a, b) => (a.day + a.time).localeCompare(b.day + b.time))) {
+  // Beobachtungen, Nächte, Tagesnotizen (zeitlich geordnet, die jüngsten 25)
+  const obs: { key: string; text: string }[] = [];
+  for (const e of d.entries.filter((x) => x.type === "notiz" && x.day >= from && x.day <= to)) {
     const t = (e.data as Record<string, unknown>)?.text;
     const sum = summarize(e);
-    obs.push(`- ${dm(e.day)} ${e.time}: ${sum}${t && !sum.includes(String(t)) ? ` – ${t}` : ""}`);
+    obs.push({ key: `${e.day} ${e.time}`, text: `- ${dm(e.day)} ${e.time}: ${sum}${t && !sum.includes(String(t)) ? ` – ${t}` : ""}` });
   }
-  for (const n of d.days.filter((x) => x.day >= from && x.day <= to && (x.nacht || x.note)).sort((a, b) => a.day.localeCompare(b.day))) {
-    obs.push(`- ${dm(n.day)}: ${[n.nacht ? `Nacht ${n.nacht}` : "", n.note || ""].filter(Boolean).join(" · ")}`);
+  for (const n of d.days.filter((x) => x.day >= from && x.day <= to && (x.nacht || x.note))) {
+    obs.push({ key: `${n.day} 00:00`, text: `- ${dm(n.day)}: ${[n.nacht ? `Nacht ${n.nacht}` : "", n.note || ""].filter(Boolean).join(" · ")}` });
   }
-  if (obs.length) L.push("", "Beobachtungen", ...obs.slice(-25));
+  obs.sort((a, b) => a.key.localeCompare(b.key));
+  if (obs.length) L.push("", "Beobachtungen", ...(obs.length > 25 ? [`(${obs.length - 25} ältere nicht aufgeführt)`] : []), ...obs.slice(-25).map((o) => o.text));
 
   if (opts.questions !== false) {
     const open = d.questions.filter((q) => q.status !== "geklaert").sort((a, b) => a.sort - b.sort);

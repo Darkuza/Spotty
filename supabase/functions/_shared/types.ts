@@ -92,6 +92,8 @@ export interface Entry {
   source?: string;
   created_by?: string | null;
   created_at?: string;
+  /** vom Server gesetzt, wenn die Zeile ankommt */
+  inserted_at?: string | null;
   updated_by?: string | null;
   updated_at?: string;
 }
@@ -118,6 +120,8 @@ export interface Photo {
   extraction?: unknown;
   created_by?: string | null;
   created_at?: string;
+  /** vom Server gesetzt, wenn die Zeile ankommt */
+  inserted_at?: string | null;
 }
 
 export interface DocFile {

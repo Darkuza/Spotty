@@ -69,3 +69,39 @@ describe("clinicReport", () => {
     expect(t2).not.toContain("Offene Fragen");
   });
 });
+
+describe("clinicReport – Sonderfälle", () => {
+  const now = { day: "2030-04-30", hm: "12:00" };
+
+  it("nennt alle Gruppen von Unverträglichkeiten", () => {
+    const d: ClinicReportData = { ...base, profile: { id: 1, data: { name: "Testhund", allergies: [{ source: "Allergietest", items: ["Pute", "Rind"] }, { source: "Klinik", items: ["Metamizol"] }] } } };
+    const t = clinicReport(d, "2030-04-28", "2030-04-30", now);
+    expect(t).toContain("Unverträglichkeiten laut Allergietest: Pute, Rind");
+    expect(t).toContain("Unverträglichkeiten laut Klinik: Metamizol");
+  });
+
+  it("führt pausierte Mittel mit abgehakten Gaben auf", () => {
+    const d: ClinicReportData = { ...base, regimens: [{ ...PRED, active: false }], checks: [{ day: "2030-04-11", slot: "pred", time: "08:00" }, { day: "2030-04-12", slot: "pred", time: "08:00" }] };
+    const t = clinicReport(d, "2030-04-10", "2030-04-14", { day: "2030-04-14", hm: "12:00" });
+    expect(t).toContain("- Testmittel: 20 mg ab 11.04., 15 mg ab 12.04. – derzeit pausiert; im Zeitraum 2 Gaben abgehakt");
+  });
+
+  it("rechnet Durchschnitte ohne den laufenden Tag", () => {
+    const drink = (day: string, ml: number): Entry => ({ id: `t-${day}`, type: "trinken", day, time: "10:00", data: { ml, weg: "spritze" }, slot: null, ack: true }) as Entry;
+    const d: ClinicReportData = { ...base, regimens: [], entries: [drink("2030-04-28", 600), drink("2030-04-29", 600), drink("2030-04-30", 100)] };
+    const t = clinicReport(d, "2030-04-28", "2030-04-30", now);
+    expect(t).toContain("- Trinken Ø 600 ml pro Tag (2 abgeschlossene Tage mit Angabe): 28.04. 600 ml · 29.04. 600 ml · 30.04. 100 ml (bis jetzt)");
+    const onlyToday = clinicReport({ ...d, entries: [drink("2030-04-30", 100)] }, "2030-04-30", "2030-04-30", now);
+    expect(onlyToday).toContain("- Trinken heute bis 12:00 Uhr: 100 ml");
+  });
+
+  it("ordnet Beobachtungen zeitlich und behält die jüngsten", () => {
+    const days = Array.from({ length: 30 }, (_, i) => ({ day: `2030-04-${String(i + 1).padStart(2, "0")}`, nacht: "ruhig" }));
+    const note = (day: string, text: string): Entry => ({ id: `n-${day}`, type: "notiz", day, time: "21:00", data: { text }, slot: null, ack: true }) as Entry;
+    const d: ClinicReportData = { ...base, regimens: [], entries: [note("2030-04-29", "Zahnfleisch blass"), note("2030-04-30", "hustet nachts stärker")], days };
+    const t = clinicReport(d, "2030-04-01", "2030-04-30", now);
+    expect(t).toContain("Zahnfleisch blass");
+    expect(t).toContain("hustet nachts stärker");
+    expect(t).toContain("ältere nicht aufgeführt");
+  });
+});

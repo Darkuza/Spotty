@@ -42,11 +42,13 @@ export function ReportSheet({ now, onClose }: { now: BerlinNow; onClose: () => v
     ["14", "14 Tage"],
     ["30", "30 Tage"],
   ];
-  const [span, setSpan] = useState<Span>(options[0][0]);
+  const [chosen, setSpan] = useState<Span>(options[0][0]);
   const [withProblems, setWithProblems] = useState(false);
   const [withQuestions, setWithQuestions] = useState(true);
+  // Fällt eine Auswahl weg (Klinikbesuch gelöscht, Plan pausiert), auf 7 Tage zurückfallen.
+  const span: Span = options.some((o) => o[0] === chosen) ? chosen : "7";
 
-  const from = span === "klinik" && lastVisit ? lastVisit : span === "therapie" && start ? start : addDays(now.day, -(parseInt(span, 10) - 1));
+  const from = span === "klinik" && lastVisit ? lastVisit : span === "therapie" && start ? start : addDays(now.day, -((parseInt(span, 10) || 7) - 1));
   const text = useMemo(
     () => clinicReport({ regimens, checks, entries, photos, days: notes, members, profile, questions }, from, now.day, now, { problems: withProblems, questions: withQuestions }),
     [regimens, checks, entries, photos, notes, members, profile, questions, from, now, withProblems, withQuestions],

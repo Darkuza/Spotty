@@ -18,6 +18,7 @@ import { berlinOfIso, fmtDayShort, type BerlinNow } from "@shared/dates.ts";
 import { extractProtocol, removeProtocolPhoto, uploadProtocolPhoto } from "../../lib/photos";
 import { copyText } from "../../lib/files";
 import { dayText } from "../../lib/report";
+import { isFreshFor, type FreshRow } from "../../lib/fresh";
 import { clinicPhone } from "../../lib/profile";
 import { IS_DEMO } from "../../lib/config";
 
@@ -129,7 +130,7 @@ export function LogView({ day, now, onDay, newSince }: { day: string; now: Berli
 
   // Neu seit dem letzten Blick: Einträge und Fotos anderer
   const me = useMe();
-  const isFresh = (r: { created_by?: string | null; created_at?: string }) => !!newSince && !!r.created_by && r.created_by !== me?.user_id && Date.parse(r.created_at || "") > newSince;
+  const isFresh = (r: FreshRow) => !!newSince && isFreshFor(r, me?.user_id, newSince);
   const freshEntries = newSince ? entries.filter(isFresh) : [];
   const freshPhotos = newSince ? photos.filter(isFresh) : [];
   const freshDays = [...new Set([...freshEntries, ...freshPhotos].map((x) => x.day))].sort().reverse();

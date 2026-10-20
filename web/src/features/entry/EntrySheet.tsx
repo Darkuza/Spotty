@@ -112,9 +112,12 @@ export function EntrySheet({ type, day, slot, entry, startCounter, onClose }: En
     }
     saveEntry({ id: entry?.id, type, day, time, data, slot: useSlot, ack: entry?.ack ?? false });
     for (const f of def.fields) {
-      if (!f.remember) continue;
+      // Nur neue Einträge prägen die Vorbelegung; das Bearbeiten alter Einträge lässt sie unverändert.
+      if (!f.remember || entry) continue;
       try {
+        // Abgewählt heißt: beim nächsten Mal nichts vorbelegen.
         if (typeof data[f.k] === "string") localStorage.setItem(memKey(type, f.k), data[f.k] as string);
+        else localStorage.removeItem(memKey(type, f.k));
       } catch {
         /* Speicher gesperrt */
       }
