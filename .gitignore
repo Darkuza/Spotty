@@ -1,0 +1,19 @@
+# Abhängigkeiten und Build
+node_modules/
+web/dist/
+web/dev-dist/
+*.tsbuildinfo
+
+# Persönliche Daten und Befunde gehören nicht ins Repository
+data-private/
+*.akte.json
+spotty-akte*.json
+spotty-sicherung*.json
+
+# Lokale Umgebungen und Geheimnisse
+.env
+.env.*
+!.env.example
+supabase/.temp/
+supabase/.branches/
+.DS_Store

@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "useDefineForClassFields": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../supabase/functions/_shared/*"]
+    }
+  },
+  "include": [
+    "src",
+    "tests",
+    "../supabase/functions/_shared/dates.ts",
+    "../supabase/functions/_shared/types.ts",
+    "../supabase/functions/_shared/plan.ts",
+    "../supabase/functions/_shared/entryTypes.ts",
+    "../supabase/functions/_shared/stats.ts",
+    "../supabase/functions/_shared/contextText.ts"
+  ],
+  "exclude": ["src/sw.ts"]
+}

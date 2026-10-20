@@ -1,0 +1,199 @@
+# Prüft den Code und stellt die App bereit:
+#   1. Prüfen: Typen, Tests, Edge Functions, Build (bei jedem Push und Pull Request)
+#   2. Bereitstellen (nur main): Datenbank, Secrets, Edge Functions, Zeitplan, Admin-Konto, Web-App
+#   3. Veröffentlichen: GitHub Pages
+# Benötigte Repository-Secrets: siehe docs/SETUP.md
+
+name: Prüfen und bereitstellen
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spotty-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Prüfen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Abhängigkeiten
+        working-directory: web
+        run: npm ci
+
+      - name: Typen
+        working-directory: web
+        run: npm run typecheck
+
+      - name: Tests
+        working-directory: web
+        run: npm test
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Edge Functions prüfen
+        run: deno check supabase/functions/*/index.ts
+
+      - name: Probe-Build
+        working-directory: web
+        run: VITE_DEMO=1 npm run build
+
+  deploy:
+    name: Bereitstellen
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_REF }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      ADMIN_NAME: ${{ secrets.ADMIN_NAME }}
+      CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Secrets vorhanden?
+        run: |
+          missing=""
+          for n in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD SUPABASE_PROJECT_ID ANTHROPIC_API_KEY ADMIN_EMAIL ADMIN_PASSWORD; do
+            [ -n "${!n}" ] || missing="$missing $n"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Es fehlen Repository-Secrets:${missing/SUPABASE_PROJECT_ID/SUPABASE_PROJECT_REF}. Anleitung: docs/SETUP.md"
+            exit 1
+          fi
+          if [ "${#ADMIN_PASSWORD}" -lt 8 ]; then
+            echo "::error::ADMIN_PASSWORD braucht mindestens 8 Zeichen."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.119.0
+
+      - name: Supabase-Projekt verbinden
+        run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
+
+      - name: Datenbank aktualisieren
+        run: supabase db push
+
+      - name: Secrets der Edge Functions setzen
+        run: |
+          set -euo pipefail
+          API="https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_ID"
+          api() { curl -sS --fail-with-body -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" "$@"; }
+          CRON_SECRET=$(printf 'spotty-cron' | openssl dgst -sha256 -hmac "$SUPABASE_DB_PASSWORD" -r | cut -d' ' -f1)
+          echo "::add-mask::$CRON_SECRET"
+          body=$(jq -n --arg a "$ANTHROPIC_API_KEY" --arg c "$CRON_SECRET" --arg p "mailto:$ADMIN_EMAIL" \
+            '[{name:"ANTHROPIC_API_KEY",value:$a},{name:"CRON_SECRET",value:$c},{name:"PUSH_CONTACT",value:$p}]')
+          if ! api "$API/secrets" | jq -e '.[] | select(.name=="VAPID_KEYS")' > /dev/null; then
+            echo "Erzeuge Schlüssel für Push-Mitteilungen (einmalig)."
+            V=$(node tools/gen-vapid.mjs)
+            echo "::add-mask::$V"
+            body=$(jq --arg v "$V" '. + [{name:"VAPID_KEYS",value:$v}]' <<<"$body")
+          fi
+          if [ -n "${CLAUDE_MODEL:-}" ]; then
+            body=$(jq --arg m "$CLAUDE_MODEL" '. + [{name:"CLAUDE_MODEL",value:$m}]' <<<"$body")
+          fi
+          api -X POST "$API/secrets" -d @- <<<"$body" > /dev/null
+          echo "Secrets gesetzt."
+
+      - name: Edge Functions bereitstellen
+        run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_ID"
+
+      - name: Zeitplan für Erinnerungen und Anmeldung einrichten
+        run: |
+          set -euo pipefail
+          API="https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_ID"
+          api() { curl -sS --fail-with-body -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" "$@"; }
+          CRON_SECRET=$(printf 'spotty-cron' | openssl dgst -sha256 -hmac "$SUPABASE_DB_PASSWORD" -r | cut -d' ' -f1)
+          echo "::add-mask::$CRON_SECRET"
+          FUNCTIONS_URL="https://$SUPABASE_PROJECT_ID.supabase.co/functions/v1"
+          SQL="insert into private.config (key, value) values ('functions_url', '$FUNCTIONS_URL'), ('cron_secret', '$CRON_SECRET') on conflict (key) do update set value = excluded.value;"
+          jq -n --arg q "$SQL" '{query: $q}' | api -X POST "$API/database/query" -d @- > /dev/null
+          echo "Zeitplan verbunden."
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO="${{ github.event.repository.name }}"
+          if [[ "$REPO" == *.github.io ]]; then SITE="https://$OWNER.github.io/"; else SITE="https://$OWNER.github.io/$REPO/"; fi
+          if jq -n --arg s "$SITE" '{disable_signup: true, site_url: $s, uri_allow_list: $s, password_min_length: 8}' | api -X PATCH "$API/config/auth" -d @- > /dev/null; then
+            echo "Anmeldung: Selbstregistrierung aus, Adresse $SITE"
+          else
+            echo "::warning::Anmeldeeinstellungen nicht gesetzt. Bitte in Supabase unter Authentication → Sign In / Providers „Allow new users to sign up“ ausschalten."
+          fi
+
+      - name: Admin-Konto sicherstellen
+        run: |
+          set -uo pipefail
+          CRON_SECRET=$(printf 'spotty-cron' | openssl dgst -sha256 -hmac "$SUPABASE_DB_PASSWORD" -r | cut -d' ' -f1)
+          echo "::add-mask::$CRON_SECRET"
+          URL="https://$SUPABASE_PROJECT_ID.supabase.co/functions/v1/admin-users"
+          code=0
+          for i in 1 2 3 4 5 6 7 8; do
+            code=$(jq -n --arg e "$ADMIN_EMAIL" --arg p "$ADMIN_PASSWORD" --arg n "${ADMIN_NAME:-Admin}" '{action:"bootstrap", email:$e, password:$p, name:$n}' \
+              | curl -sS -o resp.json -w "%{http_code}" -X POST "$URL" -H "Content-Type: application/json" -H "x-bootstrap-secret: $CRON_SECRET" -d @-)
+            if [ "$code" = "200" ]; then
+              jq -r 'if .created then "Admin-Konto angelegt." else "Admin-Konto vorhanden." end' resp.json
+              break
+            fi
+            echo "Versuch $i: HTTP $code – $(head -c 300 resp.json)"
+            sleep 10
+          done
+          rm -f resp.json
+          [ "$code" = "200" ] || { echo "::error::Das Admin-Konto konnte nicht angelegt werden."; exit 1; }
+
+      - name: Web-App bauen
+        run: |
+          set -euo pipefail
+          keys=$(curl -sS --fail-with-body -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_ID/api-keys?reveal=true")
+          KEY=$(jq -r '[.[] | select(.type=="publishable")][0].api_key // empty' <<<"$keys")
+          if [ -z "$KEY" ]; then KEY=$(jq -r '[.[] | select(.name=="anon")][0].api_key // empty' <<<"$keys"); fi
+          [ -n "$KEY" ] || { echo "::error::Kein öffentlicher Schlüssel (publishable/anon) gefunden."; exit 1; }
+          REPO="${{ github.event.repository.name }}"
+          if [[ "$REPO" == *.github.io ]]; then BASE="/"; else BASE="/$REPO/"; fi
+          cd web
+          npm ci
+          VITE_SUPABASE_URL="https://$SUPABASE_PROJECT_ID.supabase.co" VITE_SUPABASE_KEY="$KEY" VITE_BASE="$BASE" npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  pages:
+    name: Veröffentlichen
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
