@@ -31,16 +31,22 @@ function readError(text: string, status: number): string {
   }
 }
 
-/** Entfernt Denk-Einstellungen, falls das Modell sie ablehnt. */
+/** Entfernt Denk-Einstellungen (thinking, effort), falls das Modell sie ablehnt; ein Antwortformat bleibt erhalten. */
 function withoutThinking(body: Record<string, unknown>): Record<string, unknown> {
   const b = { ...body };
   delete b.thinking;
-  delete b.output_config;
+  const oc = b.output_config as Record<string, unknown> | undefined;
+  if (oc && typeof oc === "object") {
+    const rest = { ...oc };
+    delete rest.effort;
+    if (Object.keys(rest).length) b.output_config = rest;
+    else delete b.output_config;
+  }
   return b;
 }
 
 function looksLikeThinkingError(status: number, msg: string): boolean {
-  return status === 400 && /thinking|effort|output_config/i.test(msg);
+  return status === 400 && /thinking|effort/i.test(msg);
 }
 
 export async function createMessage(body: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -122,7 +128,31 @@ export function textStream(body: Record<string, unknown>, onDone?: (text: string
   });
 }
 
-/** Erzwingt eine strukturierte Antwort über ein Werkzeug und gibt dessen Eingabe zurück. */
+/** Liest JSON aus einer Textantwort (auch in einem Codeblock). */
+function parseJsonText(text: string): unknown {
+  const t = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  try {
+    return JSON.parse(t);
+  } catch {
+    const a = t.indexOf("{");
+    const b = t.lastIndexOf("}");
+    if (a >= 0 && b > a) return JSON.parse(t.slice(a, b + 1));
+    throw new ClaudeError(502, "Claude hat keine auswertbare Antwort geliefert.");
+  }
+}
+
+function textOf(res: Record<string, unknown>): string {
+  const blocks = (res.content as Array<Record<string, unknown>>) || [];
+  return blocks
+    .filter((b) => b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text as string)
+    .join("");
+}
+
+/**
+ * Strukturierte Antwort nach JSON-Schema (Structured Outputs über output_config.format).
+ * Lehnt die API das Format ab, folgt ein zweiter Versuch über ein Werkzeug ohne erzwungene Auswahl.
+ */
 export async function structured<T>(opts: {
   model?: string;
   system: string;
@@ -132,16 +162,27 @@ export async function structured<T>(opts: {
   schema: Record<string, unknown>;
   maxTokens?: number;
 }): Promise<T> {
-  const res = await createMessage({
+  const base = {
     model: opts.model || EXTRACT_MODEL,
     max_tokens: opts.maxTokens || 8000,
     system: opts.system,
-    tools: [{ name: opts.toolName, description: opts.toolDescription, input_schema: opts.schema }],
-    tool_choice: { type: "tool", name: opts.toolName },
     messages: [{ role: "user", content: opts.content }],
+  };
+  try {
+    const res = await createMessage({ ...base, output_config: { format: { type: "json_schema", schema: opts.schema } } });
+    if (res.stop_reason === "max_tokens") throw new ClaudeError(502, "Die Antwort war zu lang und wurde abgeschnitten. Bitte weniger Seiten auf einmal auslesen.");
+    return parseJsonText(textOf(res)) as T;
+  } catch (e) {
+    if (!(e instanceof ClaudeError) || e.status !== 400 || !/output_config|format|schema/i.test(e.message)) throw e;
+  }
+  const res = await createMessage({
+    ...base,
+    system: `${opts.system}\n\nGib das Ergebnis ausschließlich über das Werkzeug „${opts.toolName}“ zurück.`,
+    tools: [{ name: opts.toolName, description: opts.toolDescription, input_schema: opts.schema }],
+    tool_choice: { type: "auto" },
   });
   const blocks = (res.content as Array<Record<string, unknown>>) || [];
   const tool = blocks.find((b) => b.type === "tool_use" && b.name === opts.toolName);
-  if (!tool) throw new ClaudeError(502, "Claude hat keine strukturierte Antwort geliefert.");
-  return tool.input as T;
+  if (tool) return tool.input as T;
+  return parseJsonText(textOf(res)) as T;
 }

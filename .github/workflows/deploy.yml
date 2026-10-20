@@ -24,9 +24,9 @@ jobs:
     name: Prüfen
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -70,7 +70,7 @@ jobs:
       ADMIN_NAME: ${{ secrets.ADMIN_NAME }}
       CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Secrets vorhanden?
         run: |
@@ -87,7 +87,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
