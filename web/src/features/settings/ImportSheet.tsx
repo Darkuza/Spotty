@@ -101,7 +101,7 @@ export function ImportSheet({ onClose }: { onClose: () => void }) {
             <dd>{c.questions}</dd>
             <dt>Protokoll</dt>
             <dd>
-              {c.entries} Einträge, {c.photos} Fotos
+              {c.entries} Einträge, {c.photos} Fotos{c.checks ? `, ${c.checks} abgehakte Planpunkte` : ""}
             </dd>
             <dt>Plan</dt>
             <dd>{c.regimens} Punkte</dd>
@@ -138,6 +138,7 @@ export function ImportSheet({ onClose }: { onClose: () => void }) {
               result.events ? n(result.events, "Chronik-Eintrag", "Chronik-Einträge") : "",
               result.questions ? n(result.questions, "Frage", "Fragen") : "",
               result.entries ? n(result.entries, "Protokolleintrag", "Protokolleinträge") : "",
+              result.checks ? n(result.checks, "abgehakter Planpunkt", "abgehakte Planpunkte") : "",
               result.photos ? n(result.photos, "Foto", "Fotos") : "",
             ]
               .filter(Boolean)

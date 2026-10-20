@@ -6,7 +6,7 @@ import { backend } from "./config";
 import { store } from "./store";
 import type { TableName } from "./backend";
 import { safeName } from "./files";
-import type { Doc, DocFile, Entry, EntryType, Lab, Photo, ProfileData, Question, Regimen, TimelineEvent } from "@shared/types.ts";
+import type { Check, Doc, DocFile, Entry, EntryType, Lab, Photo, ProfileData, Question, Regimen, TimelineEvent } from "@shared/types.ts";
 import { TYPES } from "@shared/entryTypes.ts";
 import { isValidDay, isValidHm } from "@shared/dates.ts";
 
@@ -27,6 +27,8 @@ export interface Bundle {
   events?: Omit<TimelineEvent, "id">[];
   questions?: Omit<Question, "id">[];
   entries?: { day: string; time: string; type: string; data: Record<string, unknown>; slot?: string | null }[];
+  /** abgehakte Planpunkte, z. B. aus übertragenen Papierprotokollen */
+  checks?: { day: string; slot: string; time: string; note?: string | null }[];
   photos?: { day: string; time: string; file: string; mime?: string; data?: string; note?: string | null }[];
 }
 
@@ -39,6 +41,7 @@ export interface ImportSummary {
   events: number;
   questions: number;
   entries: number;
+  checks: number;
   photos: number;
   skipped: number;
   warnings: string[];
@@ -90,6 +93,7 @@ export function bundleCounts(b: Bundle) {
     events: b.events?.length || 0,
     questions: b.questions?.length || 0,
     entries: b.entries?.length || 0,
+    checks: b.checks?.length || 0,
     photos: b.photos?.length || 0,
     regimens: b.regimens?.length || 0,
   };
@@ -107,7 +111,7 @@ async function upsertChunks(table: string, rows: Record<string, unknown>[], prog
  * overwrite = false: vorhandene Datensätze (gleiche Kennung) bleiben unverändert, nur Neues kommt hinzu.
  */
 export async function importBundle(b: Bundle, overwrite: boolean, progress: Progress): Promise<ImportSummary> {
-  const sum: ImportSummary = { profile: false, regimens: 0, documents: 0, files: 0, labs: 0, events: 0, questions: 0, entries: 0, photos: 0, skipped: 0, warnings: [] };
+  const sum: ImportSummary = { profile: false, regimens: 0, documents: 0, files: 0, labs: 0, events: 0, questions: 0, entries: 0, checks: 0, photos: 0, skipped: 0, warnings: [] };
   const has = (table: TableName, key: Record<string, unknown>) => !!store.find(table, key);
   const keep = <T,>(table: TableName, key: Record<string, unknown>, row: T): T | null => {
     if (!overwrite && has(table, key)) {
@@ -255,6 +259,21 @@ export async function importBundle(b: Bundle, overwrite: boolean, progress: Prog
   }
   await upsertChunks("entries", entries as unknown as Record<string, unknown>[], progress, "Protokolleinträge");
   sum.entries = entries.length;
+
+  // Abgehakte Planpunkte; was in der App schon abgehakt ist, bleibt ohne „überschreiben“ stehen.
+  const checks: Check[] = [];
+  const slots = new Set([...(b.regimens || []), ...store.rows<Regimen>("regimens")].flatMap((r) => (r.slots || []).map((sl) => sl.key)));
+  for (const c of b.checks || []) {
+    if (!isValidDay(c.day) || !isValidHm(c.time) || !c.slot || !slots.has(c.slot)) {
+      sum.warnings.push(`Abgehakter Punkt ${c.day} ${c.time} (${c.slot}) übersprungen: ungültig oder nicht im Plan.`);
+      continue;
+    }
+    const row: Check = { day: c.day, slot: c.slot, time: c.time, note: c.note || null, created_by: store.userId || null, created_at: new Date().toISOString() };
+    const k = keep("checks", { day: c.day, slot: c.slot }, row);
+    if (k) checks.push(k);
+  }
+  await upsertChunks("checks", checks as unknown as Record<string, unknown>[], progress, "Abgehakte Planpunkte");
+  sum.checks = checks.length;
 
   // Protokollfotos
   const photos = b.photos || [];
