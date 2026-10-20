@@ -16,7 +16,7 @@ Alles läuft im Browser. Git-Befehle sind nicht nötig; Schlüssel und Passwört
 
 ## 3. Secrets im Repository
 
-Repository → **Settings** → **Secrets and variables → Actions** → **New repository secret**. Namen exakt so:
+Repository → **Settings** → **Secrets and variables → Actions** → **New repository secret**. Jedes Secret wird einzeln angelegt: ins Feld **Name** kommt genau ein Name aus der linken Spalte, ins Feld **Secret** der zugehörige Wert. Das wiederholt sich für jede Zeile:
 
 | Secret | Inhalt |
 |---|---|
@@ -34,7 +34,7 @@ Optional unter **Variables**: `CLAUDE_MODEL`, falls ein anderes Claude-Modell al
 
 Repository → **Settings → Pages** → bei „Source“ **GitHub Actions** wählen.
 
-GitHub Pages für private Repositories setzt GitHub Pro voraus. Ohne Pro kann das Repository öffentlich sein (Settings → General → Change visibility → Public): Es enthält nur Code. Die Daten liegen geschützt in Supabase; ohne Konto sieht man nur die Anmeldeseite.
+GitHub Pages für private Repositories setzt GitHub Pro voraus; GitHub zeigt dann „Upgrade or make this repository public to enable Pages“ und noch keine Auswahl „Source“. Ohne Pro wird das Repository öffentlich gestellt (Settings → General → ganz unten „Danger Zone“ → Change repository visibility → Make public). Es enthält nur Code; Secrets bleiben auch in einem öffentlichen Repository verborgen und erscheinen in den Protokollen der Actions nur als `***`. Die Daten liegen geschützt in Supabase; ohne Konto sieht man nur die Anmeldeseite. Danach erscheint unter Pages die Auswahl „Source“.
 
 ## 5. Erste Bereitstellung
 
