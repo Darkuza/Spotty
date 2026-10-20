@@ -1,14 +1,15 @@
 // Verlauf: Kennzahlen, Diagramme und Tagestabelle über einen Zeitraum.
 
 import { useMemo, useState } from "react";
-import { useChecks, useDayNotes, useEntries, usePhotos, useProfile, useRegimens } from "../../lib/data";
+import { useChecks, useDayNotes, useEntries, useEvents, usePhotos, useProfile, useRegimens } from "../../lib/data";
 import { useMembers } from "../../lib/session";
 import { Seg } from "../../ui/controls";
 import { BarsChart, PointsChart, niceRange, type ChartPoint } from "../../ui/Chart";
 import { Icon } from "../../ui/Icon";
-import { useToast } from "../../ui/overlays";
+import { useSheets, useToast } from "../../ui/overlays";
+import { ReportSheet } from "./ReportSheet";
 import { addDays, dayRange, fmtDM, fmtDayShort, minutesOf, type BerlinNow } from "@shared/dates.ts";
-import { fmtNum, num } from "@shared/entryTypes.ts";
+import { LAGE_KURZ, fmtNum, num } from "@shared/entryTypes.ts";
 import { dayStats, fluidOfDay, foodOfDay, median } from "@shared/stats.ts";
 import { itemState, itemsForDay, therapyStart } from "@shared/plan.ts";
 import type { DayNote } from "@shared/types.ts";
@@ -26,6 +27,7 @@ export function StatsView({ now, onAsk }: { now: BerlinNow; onAsk: (prompt: stri
   const members = useMembers();
   const profile = useProfile();
   const toast = useToast();
+  const sheets = useSheets();
   const start = useMemo(() => therapyStart(regimens), [regimens]);
   const [range, setRange] = useState<Range>(start ? "therapie" : "14");
 
@@ -86,14 +88,55 @@ export function StatsView({ now, onAsk }: { now: BerlinNow; onAsk: (prompt: stri
     planDone += items.filter((it) => itemState(it, d, checks, entries, photos).done).length;
   }
 
+  // Markierungen: Dosiswechsel bei Stufenplänen und Klinikbesuche
+  const events = useEvents();
+  const markers = useMemo(() => {
+    const byDay = new Map<string, string[]>();
+    const add = (d: string, label: string) => {
+      if (d < from || d > now.day) return;
+      if (!byDay.has(d)) byDay.set(d, []);
+      if (!byDay.get(d)!.includes(label)) byDay.get(d)!.push(label);
+    };
+    if (start) add(start, "Therapiebeginn");
+    for (const r of regimens) {
+      if (!r.active || r.category !== "med") continue;
+      const steps = [...(r.steps || [])].sort((a, b) => a.from.localeCompare(b.from));
+      const short = r.name.split(" ")[0];
+      for (let i = 1; i < steps.length; i++) if (steps[i].dose && steps[i].dose !== steps[i - 1].dose) add(steps[i].from, `${short} ${steps[i].dose}`);
+    }
+    for (const e of events) if (e.category === "klinik") add(e.date, "Klinik");
+    return [...byDay.entries()].map(([day, labels]) => ({ day, label: labels.join(", ") }));
+  }, [regimens, events, from, now.day, start]);
+
+  // Atemzüge in Ruhe nach Liegeseite (Median je Seite im Zeitraum)
+  const bySide = (() => {
+    const groups = new Map<string, number[]>();
+    for (const st of stats)
+      for (const a of st.atem) {
+        if (a.zustand === "aktiv") continue;
+        const k = a.lage || "";
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k)!.push(a.bpm);
+      }
+    const order = ["links", "rechts", "brust", "ruecken", "sitzt", ""];
+    return [...groups.entries()]
+      .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+      .map(([k, v]) => ({ k, label: k ? LAGE_KURZ[k] || k : "ohne Angabe", n: v.length, med: median(v) as number, min: Math.min(...v), max: Math.max(...v) }));
+  })();
+  const hasSides = bySide.some((g) => g.k);
+
   const atemTip = (d: string) => {
     const s = stats[days.indexOf(d)];
-    if (!s || !s.atem.length) return <span>{fmtDayShort(d)}: keine Zählung</span>;
+    const mk = markers.find((m) => m.day === d);
+    if (!s || !s.atem.length) return <span>{fmtDayShort(d)}: keine Zählung{mk ? ` · ${mk.label}` : ""}</span>;
     return (
       <span>
         <b>{s.atemWert != null ? `${fmtNum(s.atemWert)}/min` : "–"}</b> {fmtDayShort(d)}
+        {mk ? ` · ${mk.label}` : ""}
         <br />
-        {s.atem.map((a) => `${a.time} ${fmtNum(a.bpm)}${a.zustand === "schlaeft" ? " Schlaf" : a.zustand === "aktiv" ? " Bewegung" : ""}`).join(" · ")}
+        {s.atem
+          .map((a) => `${a.time} ${fmtNum(a.bpm)}${a.zustand === "schlaeft" ? " Schlaf" : a.zustand === "aktiv" ? " Bewegung" : ""}${a.lage ? `, ${LAGE_KURZ[a.lage] || a.lage}` : ""}`)
+          .join(" · ")}
       </span>
     );
   };
@@ -184,6 +227,7 @@ export function StatsView({ now, onAsk }: { now: BerlinNow; onAsk: (prompt: stri
               yMax={atemRange.max}
               yStep={atemRange.max - atemRange.min > 60 ? 20 : 10}
               tipFor={atemTip}
+              markers={markers}
             />
             <div className="legend">
               <span>
@@ -204,7 +248,7 @@ export function StatsView({ now, onAsk }: { now: BerlinNow; onAsk: (prompt: stri
               </span>
             </div>
             <p className="hint" style={{ marginTop: 8 }}>
-              Bei Hunden mit Herzklappenerkrankung gilt eine Schlafatemfrequenz über 40/min als Warnzeichen; gesunde Hunde liegen meist unter 30. Bei Spotty zählt vor allem die Richtung unter der Therapie.
+              Bei Hunden mit Herzklappenerkrankung gilt eine Schlafatemfrequenz über 40/min als Warnzeichen; gesunde Hunde liegen meist unter 30. Entscheidend ist vor allem die Richtung unter der Therapie.
             </p>
           </>
         ) : (
@@ -212,25 +256,60 @@ export function StatsView({ now, onAsk }: { now: BerlinNow; onAsk: (prompt: stri
         )}
       </div>
 
-      <div className="card">
-        <div className="card-title">Trinken (ml pro Tag)</div>
-        <BarsChart ariaLabel="Trinkmenge je Tag" days={days} values={fluids} color="var(--s1)" yMin={0} yMax={fluidMax.max} yStep={fluidMax.max > 600 ? 200 : 100} tipFor={(d) => {
-          const s = stats[days.indexOf(d)];
-          const f = fluidOfDay(s);
-          return <span>{fmtDayShort(d)}: <b>{f.ml != null ? `${fmtNum(f.ml)} ml` : "–"}</b>{f.source === "papier" ? " (Papier)" : s.selbstMl ? ` · selbst ${fmtNum(s.selbstMl)} ml` : ""}</span>;
-        }} />
+      {hasSides ? (
+        <div className="card">
+          <div className="card-title">Atemzüge nach Liegeseite</div>
+          <div className="table-wrap" style={{ border: 0 }}>
+            <table className="data" style={{ minWidth: 0 }}>
+              <thead>
+                <tr>
+                  <th>Lage</th>
+                  <th>Median</th>
+                  <th>Spanne</th>
+                  <th>Messungen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bySide.map((g) => (
+                  <tr key={g.k || "none"}>
+                    <td>{g.label}</td>
+                    <td>{fmtNum(g.med)}/min</td>
+                    <td>
+                      {fmtNum(g.min)}–{fmtNum(g.max)}
+                    </td>
+                    <td>{g.n}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="hint" style={{ marginTop: 8 }}>
+            Nur Messungen in Ruhe. Bei wenigen Werten sind Unterschiede zwischen den Seiten oft Zufall.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="chart-pair">
+        <div className="card">
+          <div className="card-title">Trinken (ml pro Tag)</div>
+          <BarsChart ariaLabel="Trinkmenge je Tag" days={days} values={fluids} color="var(--s1)" yMin={0} yMax={fluidMax.max} yStep={fluidMax.max > 600 ? 200 : 100} tipFor={(d) => {
+            const s = stats[days.indexOf(d)];
+            const f = fluidOfDay(s);
+            return <span>{fmtDayShort(d)}: <b>{f.ml != null ? `${fmtNum(f.ml)} ml` : "–"}</b>{f.source === "papier" ? " (Papier)" : s.selbstMl ? ` · selbst ${fmtNum(s.selbstMl)} ml` : ""}</span>;
+          }} />
+        </div>
+
+        <div className="card">
+          <div className="card-title">Futter (g pro Tag)</div>
+          <BarsChart ariaLabel="Futtermenge je Tag" days={days} values={foods} color="var(--s2)" yMin={0} yMax={foodMax.max} yStep={foodMax.max > 600 ? 200 : 100} tipFor={(d) => {
+            const s = stats[days.indexOf(d)];
+            const f = foodOfDay(s);
+            return <span>{fmtDayShort(d)}: <b>{f.g != null ? `${fmtNum(f.g)} g` : "–"}</b>{s.futterOhneMenge.length ? ` + ${s.futterOhneMenge.join(", ")}` : ""}{s.schmerz ? ` · ${s.schmerz}× Schmerzreaktion` : ""}</span>;
+          }} />
+        </div>
       </div>
 
-      <div className="card">
-        <div className="card-title">Futter (g pro Tag)</div>
-        <BarsChart ariaLabel="Futtermenge je Tag" days={days} values={foods} color="var(--s2)" yMin={0} yMax={foodMax.max} yStep={foodMax.max > 600 ? 200 : 100} tipFor={(d) => {
-          const s = stats[days.indexOf(d)];
-          const f = foodOfDay(s);
-          return <span>{fmtDayShort(d)}: <b>{f.g != null ? `${fmtNum(f.g)} g` : "–"}</b>{s.futterOhneMenge.length ? ` + ${s.futterOhneMenge.join(", ")}` : ""}{s.schmerz ? ` · ${s.schmerz}× Schmerzreaktion` : ""}</span>;
-        }} />
-      </div>
-
-      <div className="grid-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
+      <div className="chart-pair">
         <div className="card">
           <div className="card-title">SpO₂ (%)</div>
           {spoPoints.length ? (
@@ -296,6 +375,9 @@ export function StatsView({ now, onAsk }: { now: BerlinNow; onAsk: (prompt: stri
       </div>
 
       <div className="stack-s">
+        <button className="btn primary" onClick={() => sheets.open((close) => <ReportSheet now={now} onClose={close} />)}>
+          <Icon name="file" size={20} /> Bericht für die Klinik
+        </button>
         <button className="btn claude" onClick={() => onAsk(`Bitte fasse die Entwicklung von Spotty vom ${fmtDayShort(from)} bis heute zusammen: Atmung, Sättigung, Gewicht, Trinken und Futter, Auffälligkeiten und Einhaltung des Plans. Was ist besser, was schlechter, was sollten wir mit der Klinik besprechen?`)}>
           <Icon name="claude" size={20} /> Entwicklung mit Claude auswerten
         </button>

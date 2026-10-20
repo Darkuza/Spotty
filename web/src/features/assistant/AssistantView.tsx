@@ -1,8 +1,8 @@
 // Claude: Fragen zu Spotty mit der ganzen Akte, dem Plan und den Protokollen als Wissensstand.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { askClaude, deleteThread, loadThreads, saveMessage, type ChatMessage, type Thread } from "../../lib/claude";
-import { copyText } from "../../lib/files";
+import { PHOTO_MARK, askClaude, blobToBase64, deleteThread, loadThreads, saveMessage, type ChatImage, type ChatMessage, type Thread } from "../../lib/claude";
+import { copyText, shrinkImage } from "../../lib/files";
 import { newId } from "../../lib/store";
 import { IS_DEMO } from "../../lib/config";
 import { Markdown } from "../../ui/Markdown";
@@ -30,6 +30,9 @@ export function AssistantView({ prompt, onPromptUsed }: { prompt: string | null;
   const [threads, setThreads] = useState<Thread[]>([]);
   const [live, setLive] = useState<Live>(() => ({ thread: newId(), messages: [], streaming: null, error: null }));
   const [text, setText] = useState("");
+  const [attach, setAttach] = useState<ChatImage | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -53,23 +56,24 @@ export function AssistantView({ prompt, onPromptUsed }: { prompt: string | null;
   const busy = live.streaming !== null;
 
   const send = useCallback(
-    async (q: string, fresh = false) => {
-      const question = q.trim();
+    async (q: string, fresh = false, image: ChatImage | null = null) => {
+      const question = q.trim() || (image ? "Bitte sieh dir das Foto an und ordne es ein." : "");
       if (!question || abortRef.current) return;
       const thread = fresh ? newId() : live.thread;
       const base = fresh ? [] : live.messages;
-      const userMsg: ChatMessage = { id: newId(), thread, role: "user", content: question, created_at: new Date().toISOString() };
+      const userMsg: ChatMessage = { id: newId(), thread, role: "user", content: question, created_at: new Date().toISOString(), image };
       const history = [...base, userMsg];
       setLive({ thread, messages: history, streaming: "", error: null });
       setText("");
+      setAttach(null);
       const ctrl = new AbortController();
       abortRef.current = ctrl;
-      saveMessage(thread, "user", question).catch(() => undefined);
+      saveMessage(thread, "user", image ? `${question}\n\n${PHOTO_MARK}` : question).catch(() => undefined);
       let answer = "";
       let latest = "";
       try {
         answer = await askClaude(
-          history.map((m) => ({ role: m.role, content: m.content })),
+          history.map((m) => ({ role: m.role, content: m.content, image: m.image })),
           (full) => {
             latest = full;
             setLive((l) => (l.thread === thread ? { ...l, streaming: full } : l));
@@ -114,6 +118,24 @@ export function AssistantView({ prompt, onPromptUsed }: { prompt: string | null;
     ta.style.height = "auto";
     ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
   }, [text]);
+
+  const pickPhoto = async (file: File | undefined) => {
+    if (!file) return;
+    setPreparing(true);
+    try {
+      const shrunk = await shrinkImage(file, 1568, 0.85);
+      const data = await blobToBase64(shrunk.blob);
+      if (data.length > 6_000_000) throw new Error("Das Foto ist zu groß. Bitte ein kleineres wählen.");
+      if (attach) URL.revokeObjectURL(attach.url);
+      setAttach({ media_type: shrunk.type === "image/png" ? "image/png" : shrunk.type === "image/webp" ? "image/webp" : "image/jpeg", data, url: URL.createObjectURL(shrunk.blob) });
+      taRef.current?.focus();
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : "Foto konnte nicht geladen werden.", { error: true });
+    } finally {
+      setPreparing(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
 
   const openThread = (t: Thread) => setLive({ thread: t.id, messages: t.messages, streaming: null, error: null });
   const newChat = () => {
@@ -216,7 +238,11 @@ export function AssistantView({ prompt, onPromptUsed }: { prompt: string | null;
                   </div>
                 </>
               ) : (
-                <p style={{ whiteSpace: "pre-wrap" }}>{m.content}</p>
+                <>
+                  {m.image ? <img className="msg-photo" src={m.image.url} alt="Mitgeschicktes Foto" /> : null}
+                  <p style={{ whiteSpace: "pre-wrap" }}>{m.content.replace(`\n\n${PHOTO_MARK}`, "")}</p>
+                  {!m.image && m.content.includes(PHOTO_MARK) ? <p className="hint">Mit Foto gefragt (Fotos werden nicht gespeichert).</p> : null}
+                </>
               )}
             </div>
           ))}
@@ -240,35 +266,58 @@ export function AssistantView({ prompt, onPromptUsed }: { prompt: string | null;
       {loadError ? <p className="hint">Frühere Gespräche konnten nicht geladen werden: {loadError}</p> : null}
 
       <div style={{ flex: 1 }} />
-      <form
-        className="composer"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (busy) abortRef.current?.abort();
-          else void send(text);
-        }}
-      >
-        <label htmlFor="ask" className="sr-only">
-          Frage an Claude
-        </label>
-        <textarea
-          id="ask"
-          ref={taRef}
-          rows={1}
-          value={text}
-          placeholder={live.messages.length ? "Nachfragen …" : "Frage zu Spotty …"}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia("(pointer: fine)").matches) {
-              e.preventDefault();
-              if (!busy) void send(text);
-            }
+      <div className="composer-dock">
+        {attach ? (
+          <div className="attach-preview">
+            <img src={attach.url} alt="Foto für die nächste Frage" />
+            <span className="small grow">Foto wird mit der nächsten Frage geschickt.</span>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Foto entfernen"
+              onClick={() => {
+                URL.revokeObjectURL(attach.url);
+                setAttach(null);
+              }}
+            >
+              <Icon name="close" size={18} />
+            </button>
+          </div>
+        ) : null}
+        <form
+          className="composer"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (busy) abortRef.current?.abort();
+            else void send(text, false, attach);
           }}
-        />
-        <button type="submit" aria-label={busy ? "Antwort abbrechen" : "Senden"} disabled={!busy && !text.trim()}>
-          {busy ? <Icon name="close" size={20} stroke={2.4} /> : <Icon name="send" size={20} stroke={2.4} />}
-        </button>
-      </form>
+        >
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => void pickPhoto(e.target.files?.[0])} />
+          <button type="button" className="attach" aria-label="Foto anhängen" disabled={busy || preparing} onClick={() => fileRef.current?.click()}>
+            <Icon name="camera" size={20} />
+          </button>
+          <label htmlFor="ask" className="sr-only">
+            Frage an Claude
+          </label>
+          <textarea
+            id="ask"
+            ref={taRef}
+            rows={1}
+            value={text}
+            placeholder={attach ? "Frage zum Foto …" : live.messages.length ? "Nachfragen …" : "Frage zu Spotty …"}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia("(pointer: fine)").matches) {
+                e.preventDefault();
+                if (!busy) void send(text, false, attach);
+              }
+            }}
+          />
+          <button type="submit" aria-label={busy ? "Antwort abbrechen" : "Senden"} disabled={!busy && !text.trim() && !attach}>
+            {busy ? <Icon name="close" size={20} stroke={2.4} /> : <Icon name="send" size={20} stroke={2.4} />}
+          </button>
+        </form>
+      </div>
       <p className="hint" style={{ textAlign: "center" }}>
         Claude ersetzt keine Tierärztin. Bei Warnzeichen die Klinik anrufen.
       </p>

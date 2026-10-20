@@ -8,14 +8,14 @@ Das Repository enthält nur Code. Befunde, Protokolle und Namen liegen ausschlie
 
 | Bereich | Inhalt |
 |---|---|
-| Heute | Was jetzt dran ist, Tagesablauf mit Häkchen (mit Uhrzeit und Name), Messungen im Plan, Medikamentenstand mit nächster Dosisänderung und Vorratsrechnung |
-| Protokoll | Schnelleinträge für Atemzüge (Tipp-Zähler 30/60 s), SpO₂, Trinken, Futter, Kot, Urin, Gassi, Husten, Erbrechen, Gewicht, Medikamente, Beobachtungen; Warnhinweise mit Kliniknummer; Fotos der Papierprotokolle, die Claude zeilenweise ausliest |
-| Verlauf | Kennzahlen, Atemzüge mit Ausgangswert und Zielwert, SpO₂, Gewicht, Trinken und Futter je Tag, Tagestabelle, Export als Text und CSV, Auswertung durch Claude |
-| Akte | Übersicht (Stammdaten, Problemliste, Kontakte, Unverträglichkeiten, Pflegehinweise, Leitlinie), Dokumente mit Originalen, Laborwerte mit Referenzbalken und Verlauf, Chronik, Fragen an die Klinik |
-| Claude | Fragen mit der ganzen Akte, dem Plan und den Protokollen der letzten zwei Wochen als Wissensstand; Gespräche je Person |
+| Heute | Was jetzt dran ist, Tagesablauf mit Häkchen (mit Uhrzeit und Name), Nachtragen mehrerer offener Punkte, Messungen im Plan, Medikamentenstand mit nächster Dosisänderung und Vorratsrechnung, neue Medikamente mit Starttag und Dauer beginnen, Einrichtungsliste beim ersten Start |
+| Protokoll | Schnelleinträge für Atemzüge (Tipp-Zähler 30/60 s, mit Liegeseite und Untergrund), SpO₂, Trinken, Futter, Kot, Urin, Gassi, Husten, Erbrechen, Gewicht, Medikamente, Beobachtungen; Warnhinweise mit Kliniknummer; Fotos der Papierprotokolle, die Claude zeilenweise ausliest; Einträge anderer seit dem letzten Blick sind als „neu“ markiert |
+| Verlauf | Kennzahlen, Atemzüge mit Ausgangswert, Zielwert, Therapiebeginn, Dosiswechseln und Klinikbesuchen, Atemzüge nach Liegeseite, SpO₂, Gewicht, Trinken und Futter je Tag, Tagestabelle, Bericht für die Klinik zum Teilen, Export als Text und CSV, Auswertung durch Claude |
+| Akte | Übersicht (Stammdaten, Problemliste, Kontakte, Unverträglichkeiten, Pflegehinweise, Leitlinie), Dokumente mit Originalen, Laborwerte mit Referenzbalken, Verlauf und Vergleichstabelle aller Untersuchungen, Chronik, Fragen an die Klinik |
+| Claude | Fragen mit der ganzen Akte, dem Plan und den Protokollen der letzten zwei Wochen als Wissensstand, auch mit Foto (z. B. Kot, Zahnfleisch, Packung); Gespräche je Person |
 | Notfall | Kliniknummer, Warnzeichen, was bis zur Hilfe zu tun ist, Kurzinfo für fremde Tierärzte |
 
-Dazu: Anmeldung nur für eingetragene Mitglieder, Echtzeit-Abgleich zwischen allen Geräten, Offline-Betrieb mit Nachsenden, Push-Erinnerungen zur Planzeit, Installation als App auf dem Home-Bildschirm, helles und dunkles Farbschema.
+Dazu: Anmeldung nur für eingetragene Mitglieder, Echtzeit-Abgleich zwischen allen Geräten, Offline-Betrieb mit Nachsenden, Push-Erinnerungen zur Planzeit, Installation als App auf dem Home-Bildschirm, Kurzanleitung in der App, helles und dunkles Farbschema, eigene Darstellung für Tablet und Laptop.
 
 ## Aufbau
 

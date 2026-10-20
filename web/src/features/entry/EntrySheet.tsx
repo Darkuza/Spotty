@@ -15,12 +15,25 @@ import { Icon } from "../../ui/Icon";
 
 type Vals = Record<string, string | string[] | null>;
 
+const memKey = (type: EntryType, k: string) => `spotty-last-${type}-${k}`;
+
+function remembered(type: EntryType, k: string): string | null {
+  try {
+    return localStorage.getItem(memKey(type, k));
+  } catch {
+    return null;
+  }
+}
+
 function initialVals(type: EntryType, entry?: Entry | null): Vals {
   const v: Vals = {};
   for (const f of TYPES[type].fields) {
     const raw = entry?.data?.[f.k];
+    const last = !entry && f.remember ? remembered(type, f.k) : null;
     if (raw !== undefined && raw !== null) {
       v[f.k] = Array.isArray(raw) ? (raw as string[]) : f.t === "num" ? String(raw).replace(".", ",") : String(raw);
+    } else if (last) {
+      v[f.k] = last;
     } else if (f.def !== undefined) {
       v[f.k] = f.t === "num" ? String(f.def) : String(f.def);
     } else v[f.k] = f.t === "multi" ? [] : null;
@@ -98,6 +111,14 @@ export function EntrySheet({ type, day, slot, entry, startCounter, onClose }: En
       useSlot = autoSlot(items, def.measure, time, taken);
     }
     saveEntry({ id: entry?.id, type, day, time, data, slot: useSlot, ack: entry?.ack ?? false });
+    for (const f of def.fields) {
+      if (!f.remember) continue;
+      try {
+        if (typeof data[f.k] === "string") localStorage.setItem(memKey(type, f.k), data[f.k] as string);
+      } catch {
+        /* Speicher gesperrt */
+      }
+    }
     let msg = `${def.short} gespeichert`;
     if (type === "atem" && typeof data.bpm === "number") {
       const y = dayStats(store.rows<Entry>("entries"), addDays(day, -1));

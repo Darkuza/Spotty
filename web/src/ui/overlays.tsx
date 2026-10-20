@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./Icon";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 // ---------------------------------------------------------------------------
 // Sheets (stapelbar)
@@ -36,7 +37,19 @@ export function SheetHost({ children }: { children: ReactNode }) {
 }
 
 function SheetSlot({ render, onClose }: { render: (close: () => void) => ReactNode; onClose: () => void }) {
-  return <>{render(onClose)}</>;
+  return (
+    <ErrorBoundary
+      label="Dieses Fenster"
+      compact
+      wrap={(content) => (
+        <Sheet title="Fehler" onClose={onClose}>
+          {content}
+        </Sheet>
+      )}
+    >
+      {render(onClose)}
+    </ErrorBoundary>
+  );
 }
 
 export function useSheets(): SheetApi {

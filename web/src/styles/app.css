@@ -24,6 +24,7 @@
   --warn-soft: #fdefd6;
   --danger: #b42318;
   --danger-soft: #fde6e3;
+  --danger-ink: #ffffff;
   --info: #1f5bb5;
   --info-soft: #e1ebfb;
   --k-med: #0e7469;
@@ -72,6 +73,7 @@
     --warn-soft: #382a10;
     --danger: #f3786b;
     --danger-soft: #3d1a17;
+    --danger-ink: #2a0d0a;
     --info: #8db5f4;
     --info-soft: #172a47;
     --k-med: #36c9b5;
@@ -113,6 +115,7 @@
   --warn-soft: #382a10;
   --danger: #f3786b;
   --danger-soft: #3d1a17;
+  --danger-ink: #2a0d0a;
   --info: #8db5f4;
   --info-soft: #172a47;
   --k-med: #36c9b5;
@@ -378,10 +381,15 @@ body::before {
   padding: 0 4px;
   border-radius: 9px;
   background: var(--danger);
-  color: #fff;
+  color: var(--danger-ink);
   font-size: 11px;
+  font-weight: 700;
   line-height: 17px;
   text-align: center;
+}
+.tab .badge.new {
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 /* ---------- Abschnitte und Karten ---------- */
@@ -1772,9 +1780,15 @@ table.data tr:last-child td {
     opacity: 0;
   }
 }
-.composer {
+.composer-dock {
   position: sticky;
   bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 2;
+}
+.composer {
   display: flex;
   gap: 8px;
   align-items: flex-end;
@@ -1926,4 +1940,270 @@ table.data tr:last-child td {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ---------- Einrichtung und Hilfe ---------- */
+.setup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.setup-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.setup-list li .mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  flex: none;
+  display: grid;
+  place-items: center;
+  margin-top: 1px;
+  color: var(--accent-ink);
+}
+.setup-list li.done .mark {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.setup-list li.done b {
+  color: var(--muted);
+  font-weight: 600;
+}
+.setup-list li .grow .hint {
+  display: block;
+  margin-top: 1px;
+}
+.help-list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.clock .tz {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+  text-transform: uppercase;
+  line-height: 1;
+  margin-top: 2px;
+}
+.clock-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+/* ---------- Bericht für die Klinik ---------- */
+.report-preview {
+  margin: 0;
+  padding: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 52vh;
+  overflow: auto;
+  color: var(--ink);
+}
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------- Labor im Vergleich ---------- */
+table.data.lab-matrix {
+  min-width: 0;
+  table-layout: fixed;
+}
+.lab-matrix th[scope="row"] {
+  text-align: left;
+  white-space: normal;
+  hyphens: auto;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.3;
+  padding: 8px 8px 8px 10px;
+  color: var(--ink);
+  font-weight: 600;
+  background: var(--surface);
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  box-shadow: 1px 0 0 var(--line);
+}
+.lab-matrix th[scope="row"] .u {
+  display: block;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--muted);
+}
+.lab-matrix thead th:first-child {
+  z-index: 2;
+}
+.lab-matrix thead .yr {
+  font-weight: 400;
+}
+.lab-matrix tr.grp th {
+  text-align: left;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  position: static;
+  box-shadow: none;
+}
+.lab-matrix td {
+  padding: 0;
+}
+.lab-matrix thead th:not(:first-child) {
+  padding: 8px 6px;
+}
+.lab-matrix td .cell {
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  padding: 8px 8px 8px 4px;
+  width: 100%;
+  text-align: right;
+  min-height: 40px;
+}
+.lab-matrix td.hi,
+.lab-matrix td.lo {
+  color: var(--warn);
+  font-weight: 700;
+}
+.lab-matrix td.none::after {
+  content: "·";
+  color: var(--muted);
+  padding: 0 10px;
+}
+
+/* ---------- Foto im Claude-Gespräch ---------- */
+.composer {
+  padding-left: 6px;
+}
+.composer button.attach {
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+.composer button.attach:disabled {
+  opacity: 0.5;
+}
+.composer button:disabled {
+  opacity: 0.45;
+}
+.attach-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+.attach-preview img {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 10px;
+  flex: none;
+}
+.msg-photo {
+  display: block;
+  max-width: min(260px, 100%);
+  max-height: 260px;
+  object-fit: cover;
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+
+/* ---------- Neu seit dem letzten Blick ---------- */
+.tag.new {
+  background: var(--accent-soft);
+  color: var(--accent);
+  margin-left: 6px;
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
+.fresh-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* ---------- Laden und Fehler ---------- */
+.view-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  padding: 48px 0;
+  color: var(--muted);
+}
+.error-card {
+  border-color: var(--warn);
+}
+
+/* ---------- Breite Bildschirme (Tablet quer, Laptop) ---------- */
+.cols {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+.cols > .col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+@media (min-width: 1024px) {
+  .app-header .wrap,
+  .wrap.wide {
+    max-width: 1080px;
+  }
+  .wrap.wide .cols {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  }
+  .wrap.wide .chart-pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .wrap.wide .kpis {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .sheet {
+    left: 0;
+    right: 0;
+    bottom: 24px;
+    margin: 0 auto;
+    width: min(720px, calc(100% - 48px));
+    max-height: calc(100% - 48px);
+    border-radius: 20px;
+  }
+}
+.chart-pair {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
 }

@@ -19,6 +19,8 @@ export interface FieldDef {
   def?: string | number;
   counter?: boolean;
   ph?: string;
+  /** letzten Wert auf diesem Gerät als Vorgabe merken */
+  remember?: boolean;
 }
 
 export interface TypeDef {
@@ -31,6 +33,16 @@ export interface TypeDef {
 
 const NOTE: FieldDef = { k: "text", t: "text", label: "Notiz", ph: "optional" };
 
+export const LAGE_OPTS: [string, string][] = [
+  ["links", "linker Seite"],
+  ["rechts", "rechter Seite"],
+  ["brust", "Brust / Bauch"],
+  ["ruecken", "Rücken"],
+  ["sitzt", "sitzt / steht"],
+];
+
+export const LAGE_KURZ: Record<string, string> = { links: "links liegend", rechts: "rechts liegend", brust: "auf der Brust", ruecken: "auf dem Rücken", sitzt: "sitzend/stehend" };
+
 export const TYPES: Record<EntryType, TypeDef> = {
   atem: {
     label: "Atemzüge",
@@ -39,10 +51,12 @@ export const TYPES: Record<EntryType, TypeDef> = {
     fields: [
       { k: "bpm", t: "num", label: "Atemzüge pro Minute", unit: "/min", req: true, min: 4, max: 200, counter: true },
       { k: "zustand", t: "chips", label: "Dabei", opts: [["schlaeft", "schläft"], ["ruhig", "liegt wach, ruhig"], ["aktiv", "nach Bewegung / unruhig"]], def: "schlaeft" },
+      { k: "lage", t: "chips", label: "Liegt auf", opts: LAGE_OPTS },
+      { k: "untergrund", t: "chips", label: "Untergrund", opts: ["Holzboden", "Fliesen", "Teppich", "Decke / Kissen", "Hundebett", "Sofa", "Bett"], remember: true },
       { k: "o2", t: "chips", label: "Sauerstoff", opts: [["nein", "ohne"], ["ja", "mit Flow-by"]], def: "nein" },
       NOTE,
     ],
-    hint: "Ein Atemzug ist einmal Heben und Senken des Brustkorbs. Nicht beim Hecheln zählen; Cortison kann Hecheln auslösen.",
+    hint: "Ein Atemzug ist einmal Heben und Senken des Brustkorbs. Nicht beim Hecheln zählen; Cortison kann Hecheln auslösen. Die Liegeseite hilft beim Vergleich, weil eine kranke Lungenseite oben oder unten liegen kann.",
   },
   spo2: {
     label: "Sauerstoffsättigung",
@@ -190,7 +204,15 @@ export function summarize(e: Pick<Entry, "type" | "data">): string {
   const d = (e.data || {}) as Record<string, unknown>;
   switch (e.type) {
     case "atem":
-      return [num(d.bpm) != null ? `${fmtNum(num(d.bpm))}/min` : "–", d.zustand ? optLabel("atem", "zustand", d.zustand) : "", d.o2 === "ja" ? "mit O₂" : ""].filter(Boolean).join(" · ");
+      return [
+        num(d.bpm) != null ? `${fmtNum(num(d.bpm))}/min` : "–",
+        d.zustand ? optLabel("atem", "zustand", d.zustand) : "",
+        typeof d.lage === "string" ? LAGE_KURZ[d.lage] || d.lage : "",
+        s(d.untergrund),
+        d.o2 === "ja" ? "mit O₂" : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
     case "spo2":
       return [
         num(d.pct) != null ? `${fmtNum(num(d.pct))} %` : "–",

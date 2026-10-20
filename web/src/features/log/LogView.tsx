@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useChecks, useDayNotes, useEntries, usePhotos, useProfile, useRegimens, saveDayNote } from "../../lib/data";
-import { useMembers, useNameOf } from "../../lib/session";
+import { useMe, useMembers, useNameOf } from "../../lib/session";
 import { useConfirm, useSheets, useToast } from "../../ui/overlays";
 import { Icon } from "../../ui/Icon";
 import { Chips } from "../../ui/controls";
@@ -14,14 +14,14 @@ import { ExtractReview } from "./ExtractReview";
 import { QUICK_ORDER, TYPES, entryAlert, fmtNum, summarize } from "@shared/entryTypes.ts";
 import { dayStats, fluidOfDay, foodOfDay, sortEntries } from "@shared/stats.ts";
 import type { Entry, EntryType, Photo } from "@shared/types.ts";
-import type { BerlinNow } from "@shared/dates.ts";
+import { berlinOfIso, fmtDayShort, type BerlinNow } from "@shared/dates.ts";
 import { extractProtocol, removeProtocolPhoto, uploadProtocolPhoto } from "../../lib/photos";
 import { copyText } from "../../lib/files";
 import { dayText } from "../../lib/report";
 import { clinicPhone } from "../../lib/profile";
 import { IS_DEMO } from "../../lib/config";
 
-export function LogView({ day, now, onDay }: { day: string; now: BerlinNow; onDay: (d: string) => void }) {
+export function LogView({ day, now, onDay, newSince }: { day: string; now: BerlinNow; onDay: (d: string) => void; newSince?: number }) {
   const entries = useEntries();
   const photos = usePhotos();
   const notes = useDayNotes();
@@ -127,10 +127,41 @@ export function LogView({ day, now, onDay }: { day: string; now: BerlinNow; onDa
   const fl = fluidOfDay(st);
   const fo = foodOfDay(st);
 
+  // Neu seit dem letzten Blick: Einträge und Fotos anderer
+  const me = useMe();
+  const isFresh = (r: { created_by?: string | null; created_at?: string }) => !!newSince && !!r.created_by && r.created_by !== me?.user_id && Date.parse(r.created_at || "") > newSince;
+  const freshEntries = newSince ? entries.filter(isFresh) : [];
+  const freshPhotos = newSince ? photos.filter(isFresh) : [];
+  const freshDays = [...new Set([...freshEntries, ...freshPhotos].map((x) => x.day))].sort().reverse();
+  const freshNames = [...new Set([...freshEntries, ...freshPhotos].map((x) => nameOf(x.created_by)).filter(Boolean))];
+  const since = newSince ? berlinOfIso(new Date(newSince).toISOString()) : null;
+
   return (
     <div className="stack">
       <DayNav day={day} today={now.day} onChange={onDay} />
       <AlertBanners alerts={alerts} phone={clinicPhone(profile)} />
+      {since && (freshEntries.length || freshPhotos.length) ? (
+        <div className="banner info">
+          <div className="head">
+            Neu seit {since.day === now.day ? "" : `${fmtDayShort(since.day)}, `}
+            {since.hm} Uhr
+          </div>
+          <p>
+            {[freshEntries.length ? `${freshEntries.length} ${freshEntries.length === 1 ? "Eintrag" : "Einträge"}` : "", freshPhotos.length ? `${freshPhotos.length} ${freshPhotos.length === 1 ? "Foto" : "Fotos"}` : ""].filter(Boolean).join(" und ")}
+            {freshNames.length ? ` von ${freshNames.join(", ").replace(/, ([^,]*)$/, " und $1")}` : ""}
+            {freshDays.length === 1 && freshDays[0] === day ? ", unten mit „neu“ markiert." : "."}
+          </p>
+          {freshDays.some((d) => d !== day) ? (
+            <div className="fresh-days">
+              {freshDays.map((d) => (
+                <button key={d} className="btn small ghost" aria-pressed={d === day} onClick={() => onDay(d)}>
+                  {d === now.day ? "Heute" : fmtDayShort(d)}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="section-title">
         <h2>Eintragen</h2>
@@ -160,6 +191,7 @@ export function LogView({ day, now, onDay }: { day: string; now: BerlinNow; onDa
               <span className="cap">
                 {p.time}
                 {p.extraction ? " · gelesen" : ""}
+                {isFresh(p) ? " · neu" : ""}
               </span>
             </button>
           ))}
@@ -195,6 +227,7 @@ export function LogView({ day, now, onDay }: { day: string; now: BerlinNow; onDa
                   <span className="ty">
                     {TYPES[e.type]?.short || e.type}
                     {e.source === "foto" ? " · vom Foto" : e.source === "import" ? " · übernommen" : ""}
+                    {isFresh(e) ? <span className="tag new">neu</span> : null}
                   </span>
                   <span className="s" style={{ display: "block" }}>
                     {summarize(e) || "–"}

@@ -13,6 +13,9 @@ import { summarize } from "@shared/entryTypes.ts";
 import type { Check, Entry, EntryType, PlanItem, Regimen } from "@shared/types.ts";
 import { uploadProtocolPhoto } from "../../lib/photos";
 import { clinicPhone } from "../../lib/profile";
+import { SetupCard } from "./SetupCard";
+import { saveRegimen } from "../../lib/data";
+import { addDays, fmtDMY, isValidDay, isValidHm } from "@shared/dates.ts";
 
 type Status = "done" | "now" | "over" | "future" | "past";
 
@@ -109,6 +112,7 @@ export function TodayView({ day, now, onDay, onGoto }: { day: string; now: Berli
     return (
       <div className="stack">
         <DayNav day={day} today={now.day} onChange={onDay} />
+        <SetupCard />
         <div className="card">
           <Empty title="Noch kein Tagesplan">
             <p>Der Behandlungsplan kommt mit dem Import der Akte (Einstellungen → Akte importieren) oder wird unter Einstellungen → Behandlungsplan angelegt.</p>
@@ -121,6 +125,7 @@ export function TodayView({ day, now, onDay, onGoto }: { day: string; now: Berli
   return (
     <div className="stack">
       <DayNav day={day} today={now.day} onChange={onDay} />
+      {isToday ? <SetupCard /> : null}
       <AlertBanners alerts={alerts} phone={clinicPhone(profile)} />
       <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => void onFiles(e.target.files)} />
 
@@ -152,6 +157,13 @@ export function TodayView({ day, now, onDay, onGoto }: { day: string; now: Berli
             <Icon name="alert" size={20} /> Noch offen
           </div>
           <p>{old.map((x) => `${x.it.time} ${x.it.title}`).join(" · ")}</p>
+          {old.some((x) => x.it.kind === "check") ? (
+            <div className="row">
+              <button className="btn small ghost" onClick={() => sheets.open((close) => <CatchUpSheet day={day} items={old.filter((x) => x.it.kind === "check").map((x) => x.it)} onClose={close} />)}>
+                Nachtragen
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -341,8 +353,10 @@ function CheckSheet({ item, check, by, onClose, onRemove }: { item: PlanItem; ch
 }
 
 function MedsCard({ regimens, day }: { regimens: Regimen[]; day: string }) {
+  const sheets = useSheets();
   const meds = regimens.filter((r) => r.active && (r.category === "med" || r.category === "inh") && (r.steps || []).length).sort((a, b) => a.sort - b.sort);
-  if (!meds.length) return null;
+  const waiting = regimens.filter((r) => r.active && (r.category === "med" || r.category === "inh") && !(r.steps || []).length).sort((a, b) => a.sort - b.sort);
+  if (!meds.length && !waiting.length) return null;
   const now = new Date();
   return (
     <>
@@ -350,6 +364,21 @@ function MedsCard({ regimens, day }: { regimens: Regimen[]; day: string }) {
         <h2>Medikamente</h2>
       </div>
       <div className="card flush">
+        {waiting.map((r) => (
+          <div key={r.id} className="erow" style={{ gridTemplateColumns: "minmax(0,1fr) auto", alignItems: "center" }}>
+            <div>
+              <div className="s">
+                {r.name}
+                <span className="muted small">{r.purpose ? ` · ${r.purpose}` : ""}</span>
+              </div>
+              <div className="x">noch nicht begonnen{r.slots?.length ? ` · geplant ${r.slots.map((sl) => sl.time).join(", ")}` : ""}</div>
+              {r.note ? <div className="x">{r.note}</div> : null}
+            </div>
+            <button className="btn small ghost" onClick={() => sheets.open((close) => <StartSheet regimen={r} onClose={close} />)}>
+              Beginnen
+            </button>
+          </div>
+        ))}
         {meds.map((r) => {
           const cur = stepFor(r, day);
           const nc = nextChange(r, day);
@@ -391,4 +420,122 @@ function MedsCard({ regimens, day }: { regimens: Regimen[]; day: string }) {
       </div>
     </>
   );
+}
+
+/** Mehrere verpasste Punkte auf einmal abhaken, jeweils mit der tatsächlichen Uhrzeit. */
+function CatchUpSheet({ day, items, onClose }: { day: string; items: PlanItem[]; onClose: () => void }) {
+  const toast = useToast();
+  const [rows, setRows] = useState(() => items.map((it) => ({ it, on: true, time: it.time })));
+  const count = rows.filter((r) => r.on && isValidHm(r.time)).length;
+  const save = () => {
+    for (const r of rows) if (r.on && isValidHm(r.time)) checkItem(day, r.it.slot, r.time);
+    toast.show(`${count} ${count === 1 ? "Punkt" : "Punkte"} nachgetragen`);
+    onClose();
+  };
+  return (
+    <Sheet
+      title="Nachtragen"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn ghost" onClick={onClose}>
+            Abbrechen
+          </button>
+          <button className="btn primary" onClick={save} disabled={!count} style={{ flex: 2 }}>
+            {count} abhaken
+          </button>
+        </>
+      }
+    >
+      <p className="hint">Vorgabe ist die Planzeit. Abweichende Uhrzeiten bitte anpassen; was nicht gegeben wurde, abwählen.</p>
+      <div className="card flush">
+        {rows.map((r, i) => (
+          <div key={r.it.slot} className="erow" style={{ gridTemplateColumns: "28px minmax(0,1fr) 112px", alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={r.on}
+              onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, on: e.target.checked } : x)))}
+              aria-label={`${r.it.title} abhaken`}
+              style={{ width: 22, height: 22 }}
+            />
+            <span>
+              <span className="s" style={{ display: "block" }}>
+                {r.it.title}
+              </span>
+              <span className="x" style={{ display: "block" }}>
+                geplant {r.it.time}
+              </span>
+            </span>
+            <input
+              type="time"
+              value={r.time}
+              onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, time: e.target.value } : x)))}
+              aria-label={`Uhrzeit für ${r.it.title}`}
+              style={{ border: "1px solid var(--line-strong)", borderRadius: 10, padding: "8px 6px", background: "var(--surface)", width: "100%" }}
+            />
+          </div>
+        ))}
+      </div>
+    </Sheet>
+  );
+}
+
+/** Ein Medikament ohne Zeitraum (z. B. noch nicht geliefert) ab einem Tag für eine Anzahl Tage beginnen. */
+function StartSheet({ regimen, onClose }: { regimen: Regimen; onClose: () => void }) {
+  const toast = useToast();
+  const today = berlinToday();
+  const [from, setFrom] = useState(today);
+  const [days, setDays] = useState("14");
+  const [open, setOpen] = useState(false);
+  const [dose, setDose] = useState(regimen.unit && /h[uü]b/i.test(regimen.unit) ? "1 Hub" : "");
+  const n = parseInt(days, 10);
+  const valid = isValidDay(from) && (open || (n >= 1 && n <= 365));
+  const to = !open && n >= 1 ? addDays(from, n - 1) : null;
+  const save = () => {
+    if (!valid) return;
+    saveRegimen({ ...regimen, steps: [{ from, to, dose: dose.trim() || null, label: null, amount: 1, pattern: "daily" }] });
+    toast.show(`${regimen.name} beginnt am ${fmtDMY(from)}`);
+    onClose();
+  };
+  return (
+    <Sheet
+      title={`${regimen.name} beginnen`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn ghost" onClick={onClose}>
+            Abbrechen
+          </button>
+          <button className="btn primary" onClick={save} disabled={!valid} style={{ flex: 2 }}>
+            Beginnen
+          </button>
+        </>
+      }
+    >
+      {regimen.note ? <p className="hint">{regimen.note}</p> : null}
+      <div className="field">
+        <label htmlFor="start-from">Erster Tag</label>
+        <input id="start-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ maxWidth: 200 }} />
+      </div>
+      <div className="field">
+        <label htmlFor="start-days">Dauer in Tagen</label>
+        <input id="start-days" type="number" inputMode="numeric" min={1} max={365} value={days} disabled={open} onChange={(e) => setDays(e.target.value)} style={{ maxWidth: 120 }} />
+        <label className="row" style={{ gap: 8, fontWeight: 500 }}>
+          <input type="checkbox" checked={open} onChange={(e) => setOpen(e.target.checked)} style={{ width: 20, height: 20 }} /> ohne festes Ende
+        </label>
+      </div>
+      <div className="field">
+        <label htmlFor="start-dose">Dosis (erscheint im Titel)</label>
+        <input id="start-dose" type="text" value={dose} placeholder="z. B. 1 Hub" onChange={(e) => setDose(e.target.value)} />
+      </div>
+      <p className="small">
+        Uhrzeiten: {(regimen.slots || []).map((sl) => sl.time).join(", ") || "keine"}
+        {to ? ` · letzter Tag ${fmtDMY(to)}` : ""}. Ändern lässt sich das unter Einstellungen → Behandlungsplan.
+      </p>
+    </Sheet>
+  );
+}
+
+function berlinToday(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date());
 }

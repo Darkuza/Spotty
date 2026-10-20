@@ -14,6 +14,7 @@ import { PushPanel } from "./PushPanel";
 import { PlanSheet } from "./PlanEditor";
 import { MembersSheet } from "./MembersSheet";
 import { ImportSheet } from "./ImportSheet";
+import { HelpSheet } from "../HelpSheet";
 import { todayKey } from "@shared/dates.ts";
 
 function NavRow({ icon, label, hint, onClick }: { icon: string; label: string; hint?: string; onClick: () => void }) {
@@ -88,6 +89,7 @@ export function SettingsSheet({ onClose, onUpdate }: { onClose: () => void; onUp
         <h2>Verwaltung</h2>
       </div>
       <div className="card flush">
+        <NavRow icon="file" label="Kurzanleitung" hint="Was wo steht und wie man einträgt" onClick={() => sheets.open((close) => <HelpSheet onClose={close} />)} />
         <NavRow icon="pill" label="Behandlungsplan" hint="Medikamente, Uhrzeiten, Dosisstufen, Vorrat" onClick={() => sheets.open((close) => <PlanSheet onClose={close} />)} />
         {isAdmin ? <NavRow icon="user" label="Mitglieder" hint="Zugänge für die Familie" onClick={() => sheets.open((close) => <MembersSheet onClose={close} />)} /> : null}
         <NavRow icon="upload" label="Akte importieren" hint="Vorbereitete Akte-Datei einlesen" onClick={() => sheets.open((close) => <ImportSheet onClose={close} />)} />

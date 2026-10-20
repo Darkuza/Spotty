@@ -18,7 +18,7 @@ Regeln:
   gassi: {"min": Dauer in Minuten, "energie": "gut"|"mittel"|"niedrig"}
   erbrechen: {"inhalt": Text, "blut": "nein"|"ja"}
   husten: {"anzahl": Zahl, "art": Text}
-  atem: {"bpm": Atemzüge pro Minute, "zustand": "schlaeft"|"ruhig"|"aktiv", "o2": "ja"|"nein"}
+  atem: {"bpm": Atemzüge pro Minute, "zustand": "schlaeft"|"ruhig"|"aktiv", "o2": "ja"|"nein", "lage": "links"|"rechts"|"brust"|"ruecken"|"sitzt" (auf welcher Seite er lag), "untergrund": Text wie "Holzboden"}
   spo2: {"pct": Zahl, "puls": Zahl}
   gewicht: {"kg": Zahl}
   notiz: {"tags": [], "text": Beobachtung}
@@ -49,7 +49,7 @@ const ENTRY_DATA = {
     form: S, farbe: S, auff: SA,
     min: N, langsam: N, energie: S, atemDanach: S,
     inhalt: S, blut: S, anzahl: N,
-    bpm: N, zustand: S, o2: S,
+    bpm: N, zustand: S, o2: S, lage: S, untergrund: S,
     pct: N, puls: N, pulsOk: S, stelle: S,
     kg: N, name: S, dosis: S, grund: S,
     tags: SA, text: S,

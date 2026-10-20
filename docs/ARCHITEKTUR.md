@@ -22,7 +22,8 @@ Die App wird als statische Seite über GitHub Pages ausgeliefert. Alles, was Dat
 - Schriften IBM Plex Sans, Sans Condensed und Mono werden mit der App ausgeliefert (keine Anfragen an Google).
 - **Datenspeicher** (`src/lib/store.ts`): lädt alle fachlichen Tabellen, hält sie per Supabase Realtime aktuell und schreibt Änderungen sofort sichtbar. Ohne Netz warten Änderungen in einer Warteschlange auf dem Gerät und werden der Reihe nach nachgereicht; vorübergehende Fehler werden mit wachsendem Abstand wiederholt.
 - **Demo-Modus**: Ohne Supabase-Adresse läuft die App mit einem Speicher im Browser (`npm run dev`).
-- Ansichten: `features/today`, `features/log`, `features/stats`, `features/records`, `features/assistant`, `features/settings`.
+- Ansichten: `features/today`, `features/log`, `features/stats`, `features/records`, `features/assistant`, `features/settings`. Verlauf, Akte und Claude werden erst beim ersten Öffnen geladen; der Hintergrunddienst hält sie trotzdem offline vor.
+- Fehlergrenzen (`ui/ErrorBoundary.tsx`): Ein Fehler in einem Reiter oder Fenster zeigt dort einen Hinweis mit „Erneut versuchen“ bzw. „App neu laden“; der Rest der App bleibt bedienbar.
 
 ## Gemeinsame Logik (`supabase/functions/_shared/`)
 
@@ -59,7 +60,7 @@ Zugriffsregeln (Row Level Security): Nur eingetragene Mitglieder lesen und schre
 
 | Function | Aufgabe |
 |---|---|
-| `assistant` | beantwortet Fragen mit Streaming; der feste Teil der Akte wird zwischengespeichert (Prompt Caching) |
+| `assistant` | beantwortet Fragen mit Streaming; der feste Teil der Akte wird zwischengespeichert (Prompt Caching). Ein Foto zur Frage (JPEG/PNG/WebP, in der App auf 1568 px verkleinert) geht als Bildblock mit; höchstens die zwei jüngsten Fotos eines Gesprächs, gespeichert wird nur der Text |
 | `extract` | liest Protokollfotos und Befunde (PDF, Fotos) mit Claude strukturiert aus; die App zeigt das Ergebnis zur Prüfung |
 | `push-key` | liefert den öffentlichen Push-Schlüssel |
 | `push-tick` | wird alle fünf Minuten von pg_cron aufgerufen und sendet fällige Erinnerungen; mit Anmeldung auch eine Probe |

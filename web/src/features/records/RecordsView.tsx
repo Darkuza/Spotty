@@ -117,187 +117,192 @@ function Overview({ now, onAsk, onDoc }: { now: BerlinNow; onAsk: (p: string) =>
 
   return (
     <div className="stack">
-      <div className="card stack-s">
-        <div className="row between" style={{ alignItems: "flex-start", flexWrap: "nowrap" }}>
-          <div style={{ minWidth: 0 }}>
-            <h2 style={{ fontSize: 24 }}>{d.name || "Spotty"}</h2>
-            <p className="muted">{[d.species, d.breed, d.sex].filter(Boolean).join(" · ")}</p>
+      <div className="cols">
+        <div className="col">
+          <div className="card stack-s">
+            <div className="row between" style={{ alignItems: "flex-start", flexWrap: "nowrap" }}>
+              <div style={{ minWidth: 0 }}>
+                <h2 style={{ fontSize: 24 }}>{d.name || "Spotty"}</h2>
+                <p className="muted">{[d.species, d.breed, d.sex].filter(Boolean).join(" · ")}</p>
+              </div>
+              <button className="icon-btn" onClick={() => sheets.open((close) => <ProfileSheet profile={profile} onClose={close} />)} aria-label="Akte bearbeiten">
+                <Icon name="edit" />
+              </button>
+            </div>
+            <dl className="kv">
+              {d.born ? (
+                <>
+                  <dt>Geboren</dt>
+                  <dd>
+                    {fmtDMY(d.born)}
+                    {age ? ` · ${age.years} Jahre${age.months ? `, ${age.months} Monate` : ""}` : ""}
+                  </dd>
+                </>
+              ) : null}
+              {d.owner ? (
+                <>
+                  <dt>Halterin</dt>
+                  <dd>{d.owner}</dd>
+                </>
+              ) : null}
+              {lastWeight ? (
+                <>
+                  <dt>Gewicht</dt>
+                  <dd>
+                    {fmtNum(lastWeight.kg, 1)} kg am {fmtDMY(lastWeight.date)}
+                    {d.weight_normal ? <span className="muted"> · früher {d.weight_normal}</span> : null}
+                  </dd>
+                </>
+              ) : null}
+            </dl>
+            {d.guiding_principle ? (
+              <div className="finding" style={{ borderLeftColor: "var(--accent)", marginTop: 4 }}>
+                <b>Leitlinie der Familie</b>
+                <p>{d.guiding_principle}</p>
+              </div>
+            ) : null}
           </div>
-          <button className="icon-btn" onClick={() => sheets.open((close) => <ProfileSheet profile={profile} onClose={close} />)} aria-label="Akte bearbeiten">
-            <Icon name="edit" />
-          </button>
+
+          {d.problems?.length ? (
+            <>
+              <div className="section-title">
+                <h2>Problemliste</h2>
+              </div>
+              <div className="card" style={{ paddingBlock: 4 }}>
+                {d.problems.map((p, i) => (
+                  <ProblemItem key={p.id || i} n={i + 1} problem={p} docTitle={docTitle} onDoc={onDoc} />
+                ))}
+              </div>
+            </>
+          ) : null}
+
+          {d.history?.length ? (
+            <>
+              <div className="section-title">
+                <h2>Vorgeschichte</h2>
+              </div>
+              <div className="card stack-s">
+                {d.history.map((h, i) => (
+                  <p key={i}>
+                    <b className="num">{/^\d{4}-\d{2}-\d{2}$/.test(h.date) ? fmtDMY(h.date) : h.date}</b> {h.text}
+                  </p>
+                ))}
+              </div>
+            </>
+          ) : null}
         </div>
-        <dl className="kv">
-          {d.born ? (
+        <div className="col">
+          {d.contacts?.length ? (
             <>
-              <dt>Geboren</dt>
-              <dd>
-                {fmtDMY(d.born)}
-                {age ? ` · ${age.years} Jahre${age.months ? `, ${age.months} Monate` : ""}` : ""}
-              </dd>
-            </>
-          ) : null}
-          {d.owner ? (
-            <>
-              <dt>Halterin</dt>
-              <dd>{d.owner}</dd>
-            </>
-          ) : null}
-          {lastWeight ? (
-            <>
-              <dt>Gewicht</dt>
-              <dd>
-                {fmtNum(lastWeight.kg, 1)} kg am {fmtDMY(lastWeight.date)}
-                {d.weight_normal ? <span className="muted"> · früher {d.weight_normal}</span> : null}
-              </dd>
-            </>
-          ) : null}
-        </dl>
-        {d.guiding_principle ? (
-          <div className="finding" style={{ borderLeftColor: "var(--accent)", marginTop: 4 }}>
-            <b>Leitlinie der Familie</b>
-            <p>{d.guiding_principle}</p>
-          </div>
-        ) : null}
-      </div>
-
-      {d.problems?.length ? (
-        <>
-          <div className="section-title">
-            <h2>Problemliste</h2>
-          </div>
-          <div className="card" style={{ paddingBlock: 4 }}>
-            {d.problems.map((p, i) => (
-              <ProblemItem key={p.id || i} n={i + 1} problem={p} docTitle={docTitle} onDoc={onDoc} />
-            ))}
-          </div>
-        </>
-      ) : null}
-
-      {d.contacts?.length ? (
-        <>
-          <div className="section-title">
-            <h2>Kontakte</h2>
-          </div>
-          <div className="card flush">
-            {d.contacts.map((c, i) => (
-              <div key={i} className="erow" style={{ gridTemplateColumns: "minmax(0,1fr) auto" }}>
-                <div>
-                  <div className="s">{c.name}</div>
-                  {c.role ? <div className="x">{c.role}</div> : null}
-                  {c.address ? <div className="x">{c.address}</div> : null}
-                  {c.note ? <div className="x">{c.note}</div> : null}
-                  {c.phone ? (
-                    <div className="x num" style={{ color: "var(--ink)", fontSize: 15, marginTop: 4 }}>
-                      {c.phone}
+              <div className="section-title">
+                <h2>Kontakte</h2>
+              </div>
+              <div className="card flush">
+                {d.contacts.map((c, i) => (
+                  <div key={i} className="erow" style={{ gridTemplateColumns: "minmax(0,1fr) auto" }}>
+                    <div>
+                      <div className="s">{c.name}</div>
+                      {c.role ? <div className="x">{c.role}</div> : null}
+                      {c.address ? <div className="x">{c.address}</div> : null}
+                      {c.note ? <div className="x">{c.note}</div> : null}
+                      {c.phone ? (
+                        <div className="x num" style={{ color: "var(--ink)", fontSize: 15, marginTop: 4 }}>
+                          {c.phone}
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
-                </div>
-                {c.phone ? (
-                  <div className="stack-s" style={{ gap: 6 }}>
-                    <a className="btn small primary" href={telHref(c.phone)}>
-                      <Icon name="phone" size={18} /> Anrufen
-                    </a>
-                    <button
-                      className="btn small ghost"
-                      onClick={async () => {
-                        const ok = await copyText(c.phone || "");
-                        toast.show(ok ? "Nummer kopiert" : "Kopieren nicht möglich", { error: !ok });
-                      }}
-                    >
-                      <Icon name="copy" size={18} /> Kopieren
-                    </button>
+                    {c.phone ? (
+                      <div className="stack-s" style={{ gap: 6 }}>
+                        <a className="btn small primary" href={telHref(c.phone)}>
+                          <Icon name="phone" size={18} /> Anrufen
+                        </a>
+                        <button
+                          className="btn small ghost"
+                          onClick={async () => {
+                            const ok = await copyText(c.phone || "");
+                            toast.show(ok ? "Nummer kopiert" : "Kopieren nicht möglich", { error: !ok });
+                          }}
+                        >
+                          <Icon name="copy" size={18} /> Kopieren
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
+                ))}
               </div>
-            ))}
-          </div>
-        </>
-      ) : null}
+            </>
+          ) : null}
 
-      {d.allergies?.length ? (
-        <>
-          <div className="section-title">
-            <h2>Unverträglichkeiten</h2>
-          </div>
-          <div className="card stack-s">
-            {d.allergies.map((a, i) => (
-              <div key={i}>
-                <p>{a.items.join(", ")}</p>
-                <p className="hint">{a.source}</p>
+          {d.allergies?.length ? (
+            <>
+              <div className="section-title">
+                <h2>Unverträglichkeiten</h2>
               </div>
-            ))}
-          </div>
-        </>
-      ) : null}
-
-      {d.care_notes?.length ? (
-        <>
-          <div className="section-title">
-            <h2>Pflegehinweise</h2>
-          </div>
-          <div className="card">
-            <ul style={{ margin: 0, paddingLeft: 20 }} className="stack-s">
-              {d.care_notes.map((c, i) => (
-                <li key={i}>{c}</li>
-              ))}
-            </ul>
-          </div>
-        </>
-      ) : null}
-
-      {d.devices?.length ? (
-        <>
-          <div className="section-title">
-            <h2>Geräte und Hilfsmittel</h2>
-          </div>
-          <div className="card flush">
-            {d.devices.map((x, i) => (
-              <div key={i} className="erow" style={{ gridTemplateColumns: "minmax(0,1fr)" }}>
-                <div>
-                  <div className="s">{x.name}</div>
-                  {x.note ? <div className="x">{x.note}</div> : null}
-                </div>
+              <div className="card stack-s">
+                {d.allergies.map((a, i) => (
+                  <div key={i}>
+                    <p>{a.items.join(", ")}</p>
+                    <p className="hint">{a.source}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </>
-      ) : null}
+            </>
+          ) : null}
 
-      {d.history?.length ? (
-        <>
-          <div className="section-title">
-            <h2>Vorgeschichte</h2>
-          </div>
-          <div className="card stack-s">
-            {d.history.map((h, i) => (
-              <p key={i}>
-                <b className="num">{/^\d{4}-\d{2}-\d{2}$/.test(h.date) ? fmtDMY(h.date) : h.date}</b> {h.text}
-              </p>
-            ))}
-          </div>
-        </>
-      ) : null}
+          {d.care_notes?.length ? (
+            <>
+              <div className="section-title">
+                <h2>Pflegehinweise</h2>
+              </div>
+              <div className="card">
+                <ul style={{ margin: 0, paddingLeft: 20 }} className="stack-s">
+                  {d.care_notes.map((c, i) => (
+                    <li key={i}>{c}</li>
+                  ))}
+                </ul>
+              </div>
+            </>
+          ) : null}
 
-      {d.residences?.length ? (
-        <>
-          <div className="section-title">
-            <h2>Wohnorte</h2>
-          </div>
-          <div className="card stack-s">
-            {d.residences.map((r, i) => (
-              <p key={i} className="small">
-                <b className="num">
-                  {r.from}
-                  {r.to ? `–${r.to}` : " bis heute"}
-                </b>{" "}
-                {r.place}
-                {r.note ? <span className="muted"> · {r.note}</span> : null}
-              </p>
-            ))}
-          </div>
-        </>
-      ) : null}
+          {d.devices?.length ? (
+            <>
+              <div className="section-title">
+                <h2>Geräte und Hilfsmittel</h2>
+              </div>
+              <div className="card flush">
+                {d.devices.map((x, i) => (
+                  <div key={i} className="erow" style={{ gridTemplateColumns: "minmax(0,1fr)" }}>
+                    <div>
+                      <div className="s">{x.name}</div>
+                      {x.note ? <div className="x">{x.note}</div> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
+
+          {d.residences?.length ? (
+            <>
+              <div className="section-title">
+                <h2>Wohnorte</h2>
+              </div>
+              <div className="card stack-s">
+                {d.residences.map((r, i) => (
+                  <p key={i} className="small">
+                    <b className="num">
+                      {r.from}
+                      {r.to ? `–${r.to}` : " bis heute"}
+                    </b>{" "}
+                    {r.place}
+                    {r.note ? <span className="muted"> · {r.note}</span> : null}
+                  </p>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </div>
+      </div>
 
       {d.notes ? <p className="hint" style={{ whiteSpace: "pre-wrap" }}>{d.notes}</p> : null}
 

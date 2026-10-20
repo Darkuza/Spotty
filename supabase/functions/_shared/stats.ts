@@ -9,6 +9,7 @@ export interface AtemPoint {
   bpm: number;
   zustand: string;
   o2: boolean;
+  lage: string | null;
 }
 
 export interface DayStats {
@@ -141,7 +142,7 @@ export function dayStats(all: Entry[], day: string, note?: DayNote | null): DayS
         break;
       case "atem": {
         const b = num(d.bpm);
-        if (b != null) st.atem.push({ time: e.time, bpm: b, zustand: String(d.zustand || ""), o2: d.o2 === "ja" });
+        if (b != null) st.atem.push({ time: e.time, bpm: b, zustand: String(d.zustand || ""), o2: d.o2 === "ja", lage: typeof d.lage === "string" ? d.lage : null });
         break;
       }
       case "spo2": {

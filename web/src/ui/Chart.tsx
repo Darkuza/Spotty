@@ -1,9 +1,31 @@
 // Diagramme in SVG: Messpunkte je Tag mit Tageslinie, Referenzband und Ziellinie; Säulen je Tag.
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { fmtDM, fmtDayShort } from "@shared/dates.ts";
 
-const W = 360;
+/** Breite des Diagramms in Pixeln; die Zeichnung wird nicht skaliert, damit Beschriftungen auf jedem Bildschirm gleich groß bleiben. */
+function useWidth(ref: RefObject<HTMLDivElement | null>, fallback = 360): number {
+  const [w, setW] = useState(fallback);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const cw = Math.round(el.clientWidth);
+      if (cw > 0) setW(Math.max(240, cw));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return w;
+}
+
+/** Auf breiten Flächen etwas höher zeichnen, damit die Proportionen stimmen. */
+function scaledHeight(height: number, w: number): number {
+  return w > 560 ? Math.round(height * Math.min(1.5, 1 + (w - 560) / 1000)) : height;
+}
 
 export interface ChartPoint {
   day: string;
@@ -41,7 +63,7 @@ export function niceRange(values: number[], minSpan: number, step: number, floor
   return { min, max };
 }
 
-function useGeometry(days: string[], height: number, yMin: number, yMax: number) {
+function useGeometry(days: string[], height: number, yMin: number, yMax: number, W: number) {
   return useMemo(() => {
     const ml = 34;
     const mr = 14;
@@ -54,14 +76,15 @@ function useGeometry(days: string[], height: number, yMin: number, yMax: number)
     const step = n > 1 ? (pw - 2 * pad) / (n - 1) : 0;
     const xDay = (i: number) => (n > 1 ? ml + pad + i * step : ml + pw / 2);
     const y = (v: number) => mt + ph - ((v - yMin) / (yMax - yMin || 1)) * ph;
-    return { ml, mr, mt, mb, pw, ph, n, step, xDay, y, colW: n > 1 ? step : pw };
-  }, [days, height, yMin, yMax]);
+    return { W, H: height, ml, mr, mt, mb, pw, ph, n, step, xDay, y, colW: n > 1 ? step : pw };
+  }, [days, height, yMin, yMax, W]);
 }
 
-function xLabels(days: string[]): number[] {
+function xLabels(days: string[], W = 360): number[] {
   const n = days.length;
-  if (n <= 7) return days.map((_, i) => i);
-  const every = Math.ceil(n / 6);
+  const fit = Math.max(6, Math.floor((W - 48) / 56));
+  if (n <= Math.max(7, fit)) return days.map((_, i) => i);
+  const every = Math.ceil(n / fit);
   const out: number[] = [];
   for (let i = 0; i < n; i += every) out.push(i);
   if (out[out.length - 1] !== n - 1 && n - 1 - out[out.length - 1] >= every / 2) out.push(n - 1);
@@ -75,14 +98,14 @@ function Axes({ g, days, yMin, yMax, yStep, fmt }: { g: ReturnType<typeof useGeo
     <g>
       {ticks.map((v) => (
         <g key={v}>
-          <line className="grid" x1={g.ml} x2={W - g.mr} y1={g.y(v)} y2={g.y(v)} />
+          <line className="grid" x1={g.ml} x2={g.W - g.mr} y1={g.y(v)} y2={g.y(v)} />
           <text className="ax" x={g.ml - 6} y={g.y(v) + 4} textAnchor="end">
             {fmt(v)}
           </text>
         </g>
       ))}
-      <line className="base" x1={g.ml} x2={W - g.mr} y1={g.y(yMin)} y2={g.y(yMin)} />
-      {xLabels(days).map((i) => (
+      <line className="base" x1={g.ml} x2={g.W - g.mr} y1={g.y(yMin)} y2={g.y(yMin)} />
+      {xLabels(days, g.W).map((i) => (
         <text key={days[i]} className="ax" x={g.xDay(i)} y={g.mt + g.ph + 17} textAnchor="middle">
           {fmtDM(days[i])}
         </text>
@@ -91,7 +114,7 @@ function Axes({ g, days, yMin, yMax, yStep, fmt }: { g: ReturnType<typeof useGeo
   );
 }
 
-function Tip({ show, x, children }: { show: boolean; x: number; children: ReactNode }) {
+function Tip({ show, x, W, children }: { show: boolean; x: number; W: number; children: ReactNode }) {
   if (!show) return null;
   const left = Math.min(Math.max((x / W) * 100, 18), 82);
   return (
@@ -115,14 +138,20 @@ export function PointsChart({
   fmt = (v) => String(v),
   tipFor,
   ariaLabel,
+  markers,
 }: Common & {
   points: ChartPoint[];
   line?: { day: string; value: number }[];
   band?: { from: number; to: number; label: string } | null;
   refLine?: { value: number; label: string } | null;
   colors: Record<string, string>;
+  /** senkrechte Markierungen, z. B. Dosiswechsel oder Klinikbesuch */
+  markers?: { day: string; label: string }[];
 }) {
-  const g = useGeometry(days, height, yMin, yMax);
+  const box = useRef<HTMLDivElement>(null);
+  const W = useWidth(box);
+  const H = scaledHeight(height, W);
+  const g = useGeometry(days, H, yMin, yMax, W);
   const [tip, setTip] = useState<number | null>(null);
   const idx = useMemo(() => new Map(days.map((d, i) => [d, i])), [days]);
   const jitterW = Math.min(g.colW * 0.6, 44);
@@ -134,8 +163,8 @@ export function PointsChart({
   const clampY = (v: number) => Math.min(Math.max(v, yMin), yMax);
   const last = linePts[linePts.length - 1];
   return (
-    <div className="chart" onPointerLeave={() => setTip(null)}>
-      <svg viewBox={`0 0 ${W} ${height}`} role="img" aria-label={ariaLabel}>
+    <div className="chart" ref={box} onPointerLeave={() => setTip(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={ariaLabel}>
         {band ? (
           <g>
             <rect x={g.ml} width={g.pw} y={g.y(clampY(band.to))} height={Math.max(0, g.y(clampY(band.from)) - g.y(clampY(band.to)))} fill="var(--band)" />
@@ -145,9 +174,25 @@ export function PointsChart({
           </g>
         ) : null}
         <Axes g={g} days={days} yMin={yMin} yMax={yMax} yStep={yStep} fmt={fmt} />
+        {(markers || [])
+          .filter((m) => idx.has(m.day))
+          .map((m, i, arr) => {
+            const x = g.xDay(idx.get(m.day)!);
+            const showLabel = arr.length <= 5;
+            return (
+              <g key={`mk${m.day}${i}`}>
+                <line x1={x} x2={x} y1={g.mt} y2={g.mt + g.ph} stroke="var(--k-inh)" strokeWidth={1.2} strokeDasharray="3 3" />
+                {showLabel ? (
+                  <text className="ax" x={x > W - 90 ? x - 3 : x + 3} y={g.mt + 9 + (i % 2) * 10} textAnchor={x > W - 90 ? "end" : "start"} style={{ fill: "var(--k-inh)" }}>
+                    {m.label}
+                  </text>
+                ) : null}
+              </g>
+            );
+          })}
         {refLine && refLine.value >= yMin && refLine.value <= yMax ? (
           <g>
-            <line x1={g.ml} x2={W - g.mr} y1={g.y(refLine.value)} y2={g.y(refLine.value)} stroke="var(--ok)" strokeWidth={1.5} />
+            <line x1={g.ml} x2={g.W - g.mr} y1={g.y(refLine.value)} y2={g.y(refLine.value)} stroke="var(--ok)" strokeWidth={1.5} />
             <text className="lbl" x={g.ml + 6} y={g.y(refLine.value) - 5} textAnchor="start" style={{ fill: "var(--ok)" }}>
               {refLine.label}
             </text>
@@ -200,7 +245,7 @@ export function PointsChart({
         {tip !== null ? <line x1={g.xDay(tip)} x2={g.xDay(tip)} y1={g.mt} y2={g.mt + g.ph} stroke="var(--line-strong)" strokeWidth={1} /> : null}
       </svg>
       {tipFor && tip !== null ? (
-        <Tip show x={g.xDay(tip)}>
+        <Tip show x={g.xDay(tip)} W={W}>
           {tipFor(days[tip])}
         </Tip>
       ) : null}
@@ -209,17 +254,20 @@ export function PointsChart({
 }
 
 export function BarsChart({ days, values, color = "var(--s1)", height = 170, yMin, yMax, yStep, fmt = (v) => String(v), tipFor, ariaLabel, refLine }: Common & { values: (number | null)[]; color?: string; refLine?: { value: number; label: string } | null }) {
-  const g = useGeometry(days, height, yMin, yMax);
+  const box = useRef<HTMLDivElement>(null);
+  const W = useWidth(box);
+  const H = scaledHeight(height, W);
+  const g = useGeometry(days, H, yMin, yMax, W);
   const [tip, setTip] = useState<number | null>(null);
-  const bw = Math.max(4, Math.min(24, g.colW * 0.62));
+  const bw = Math.max(4, Math.min(28, g.colW * 0.62));
   return (
-    <div className="chart" onPointerLeave={() => setTip(null)}>
-      <svg viewBox={`0 0 ${W} ${height}`} role="img" aria-label={ariaLabel}>
+    <div className="chart" ref={box} onPointerLeave={() => setTip(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={ariaLabel}>
         <Axes g={g} days={days} yMin={yMin} yMax={yMax} yStep={yStep} fmt={fmt} />
         {refLine && refLine.value <= yMax ? (
           <g>
-            <line x1={g.ml} x2={W - g.mr} y1={g.y(refLine.value)} y2={g.y(refLine.value)} stroke="var(--ok)" strokeWidth={1.5} />
-            <text className="lbl" x={W - g.mr} y={g.y(refLine.value) - 5} textAnchor="end" style={{ fill: "var(--ok)" }}>
+            <line x1={g.ml} x2={g.W - g.mr} y1={g.y(refLine.value)} y2={g.y(refLine.value)} stroke="var(--ok)" strokeWidth={1.5} />
+            <text className="lbl" x={g.W - g.mr} y={g.y(refLine.value) - 5} textAnchor="end" style={{ fill: "var(--ok)" }}>
               {refLine.label}
             </text>
           </g>
@@ -253,7 +301,7 @@ export function BarsChart({ days, values, color = "var(--s1)", height = 170, yMi
           : null}
       </svg>
       {tipFor && tip !== null ? (
-        <Tip show x={g.xDay(tip)}>
+        <Tip show x={g.xDay(tip)} W={W}>
           {tipFor(days[tip])}
         </Tip>
       ) : null}

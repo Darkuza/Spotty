@@ -1,6 +1,6 @@
 // Laborwerte: je Untersuchungstag nach Gruppen, mit Referenzbalken wie auf dem Geräteausdruck und Verlauf je Parameter.
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import type { Doc, Lab } from "@shared/types.ts";
 import { fmtDM, fmtDMY } from "@shared/dates.ts";
 import { Seg, Toggle } from "../../ui/controls";
@@ -74,11 +74,19 @@ function sortLabs(a: Lab, b: Lab): number {
 
 const seriesKey = (l: Lab) => `${l.code || l.param}|${l.unit || ""}`;
 
+function isLow(l: Lab): boolean {
+  if (l.flag) return l.flag === "L";
+  return l.value != null && l.ref_low != null && l.value < l.ref_low;
+}
+
+type LabView = "tag" | "vergleich";
+
 export function LabsPanel({ labs, docs, initialDate }: { labs: Lab[]; docs: Doc[]; initialDate?: string | null }) {
   const sheets = useSheets();
   const dates = useMemo(() => [...new Set(labs.map((l) => l.date))].sort().reverse(), [labs]);
   const [date, setDate] = useState<string>(initialDate && dates.includes(initialDate) ? initialDate : dates[0] || "");
   const [onlyOut, setOnlyOut] = useState(false);
+  const [view, setView] = useState<LabView>("tag");
   const series = useMemo(() => {
     const m = new Map<string, Lab[]>();
     for (const l of labs) {
@@ -117,8 +125,37 @@ export function LabsPanel({ labs, docs, initialDate }: { labs: Lab[]; docs: Doc[
   const sources = [...new Set(labs.filter((l) => l.date === date).map((l) => l.document_id))].map(docOf).filter(Boolean) as Doc[];
   const devices = [...new Set(labs.filter((l) => l.date === date && l.device).map((l) => l.device))];
 
+  const openLab = (l: Lab) => sheets.open((close) => <LabSheet lab={l} all={labs} docs={docs} onClose={close} />);
+  const viewSeg =
+    dates.length > 1 ? (
+      <Seg<LabView>
+        label="Ansicht der Laborwerte"
+        value={view}
+        onChange={setView}
+        options={[
+          ["tag", "Je Untersuchung"],
+          ["vergleich", "Alle im Vergleich"],
+        ]}
+      />
+    ) : null;
+
+  if (view === "vergleich" && dates.length > 1) {
+    return (
+      <div className="stack">
+        {viewSeg}
+        <div className="card stack-s">
+          <p className="hint">Neueste Untersuchung links. Pfeile markieren Werte außerhalb der Referenz des jeweiligen Labors; einen Wert antippen zeigt den Verlauf.</p>
+          <Toggle label="Nur Werte, die mindestens einmal auffällig waren" checked={onlyOut} onChange={setOnlyOut} />
+        </div>
+        <LabMatrix dates={dates} series={series} onlyOut={onlyOut} onOpen={openLab} />
+        <p className="hint">Referenzbereiche gelten für das jeweilige Labor und Gerät. Werte verschiedener Labore sind nur eingeschränkt vergleichbar.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="stack">
+      {viewSeg}
       <Seg<string> label="Untersuchungstag" value={date} onChange={setDate} options={dates.map((d) => [d, d.slice(0, 4) === dates[0].slice(0, 4) ? fmtDM(d) : `${fmtDM(d)}${d.slice(2, 4)}`] as [string, string])} />
       <div className="card stack-s">
         <div className="row between">
@@ -144,7 +181,7 @@ export function LabsPanel({ labs, docs, initialDate }: { labs: Lab[]; docs: Doc[
                 const s = series.get(seriesKey(l)) || [];
                 const vals = s.filter((x) => x.value != null).map((x) => x.value as number);
                 return (
-                  <button key={l.id} className="lab" onClick={() => sheets.open((close) => <LabSheet lab={l} all={labs} docs={docs} onClose={close} />)}>
+                  <button key={l.id} className="lab" onClick={() => openLab(l)}>
                     <span className="p">
                       {l.param}
                       <span>
@@ -167,6 +204,85 @@ export function LabsPanel({ labs, docs, initialDate }: { labs: Lab[]; docs: Doc[
       ))}
       {!day.length ? <p className="hint">Keine auffälligen Werte an diesem Tag.</p> : null}
       <p className="hint">Referenzbereiche gelten für das jeweilige Labor und Gerät. Werte verschiedener Labore sind nur eingeschränkt vergleichbar.</p>
+    </div>
+  );
+}
+
+const NAME_COL = 136;
+const DATE_COL = 72;
+
+function LabMatrix({ dates, series, onlyOut, onOpen }: { dates: string[]; series: Map<string, Lab[]>; onlyOut: boolean; onOpen: (l: Lab) => void }) {
+  const rows = [...series.entries()]
+    .map(([k, list]) => ({ k, list, last: list[list.length - 1] }))
+    .filter((r) => !onlyOut || r.list.some(isOut))
+    .sort((a, b) => sortLabs(a.last, b.last));
+  const groups = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const g = r.last.grp || "Sonstiges";
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g)!.push(r);
+  }
+  const names = [...groups.keys()].sort((a, b) => {
+    const ia = GROUP_ORDER.indexOf(a);
+    const ib = GROUP_ORDER.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b, "de");
+  });
+  if (!rows.length) return <p className="hint">Kein Wert war bisher außerhalb der Referenz.</p>;
+  return (
+    <div className="table-wrap">
+      <table className="data lab-matrix" style={{ width: NAME_COL + dates.length * DATE_COL }}>
+        <colgroup>
+          <col style={{ width: NAME_COL }} />
+          {dates.map((d) => (
+            <col key={d} style={{ width: DATE_COL }} />
+          ))}
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col">Wert</th>
+            {dates.map((d) => (
+              <th key={d} scope="col">
+                {fmtDM(d)}
+                <br />
+                <span className="yr">{d.slice(0, 4)}</span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {names.map((g) => (
+            <Fragment key={g}>
+              <tr className="grp">
+                <th scope="rowgroup" colSpan={dates.length + 1}>
+                  {g}
+                </th>
+              </tr>
+              {groups.get(g)!.map((r) => (
+                <tr key={r.k}>
+                  <th scope="row">
+                    {r.last.param}
+                    {r.last.unit ? <span className="u">{r.last.unit}</span> : null}
+                  </th>
+                  {dates.map((d) => {
+                    const l = r.list.find((x) => x.date === d);
+                    if (!l) return <td key={d} className="none" aria-label="nicht gemessen" />;
+                    const out = isOut(l);
+                    const low = out && isLow(l);
+                    return (
+                      <td key={d} className={out ? (low ? "lo" : "hi") : ""}>
+                        <button className="cell" onClick={() => onOpen(l)} aria-label={`${l.param} am ${fmtDMY(d)}: ${labValue(l)}${out ? (low ? ", erniedrigt" : ", erhöht") : ""}`}>
+                          {labValue(l)}
+                          {out ? <span aria-hidden="true">{low ? " ↓" : " ↑"}</span> : null}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
