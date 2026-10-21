@@ -1,60 +1,82 @@
-// Navigation über den Hash der Adresse: Reiter und Unterseiten (#akte/dokumente, #verlauf/atem).
+// Navigation über den Hash der Adresse, aufgebaut wie die Health-App: zwei Reiter (Übersicht, Entdecken)
+// mit eigenen Unterseiten (#entdecken/k/atmung, #uebersicht/m/atem) und Claude als eigene Seite.
 // Jede Seite bekommt einen Eintrag im Browserverlauf, damit die Zurück-Geste des Telefons funktioniert.
 // Die App merkt sich je Reiter die zuletzt offene Unterseite und je Seite die Scrollposition.
+// Adressen der früheren Fassung (#heute, #protokoll, #verlauf/atem, #akte/labor …) werden umgeleitet.
 
 import { useSyncExternalStore } from "react";
 
-export type Tab = "heute" | "protokoll" | "verlauf" | "akte" | "claude";
-export const TAB_IDS: Tab[] = ["heute", "protokoll", "verlauf", "akte", "claude"];
+export type Tab = "uebersicht" | "entdecken" | "claude";
+export const TAB_IDS: Tab[] = ["uebersicht", "entdecken", "claude"];
 
 export interface Route {
   path: string;
-  tab: Tab | null;
-  parts: string[];
+  tab: Tab;
+  /** Pfad ohne Reiter, z. B. ["m", "atem"] */
+  sub: string[];
 }
 
 type Move = "push" | "back" | "forward" | "replace" | "load";
 
-const TITLES: Record<string, string> = {
-  heute: "Heute",
-  protokoll: "Protokoll",
-  verlauf: "Verlauf",
-  "verlauf/atem": "Atemzüge",
-  "verlauf/trinken": "Getrunken",
-  "verlauf/futter": "Gefressen",
-  "verlauf/gewicht": "Gewicht",
-  "verlauf/spo2": "SpO₂",
-  "verlauf/plan": "Plan",
-  akte: "Akte",
-  "akte/dokumente": "Dokumente",
-  "akte/dokument": "Dokument",
-  "akte/labor": "Laborwerte",
-  "akte/chronik": "Chronik",
-  "akte/fragen": "Fragen",
-  claude: "Claude",
-  mehr: "Mehr",
-};
+const LEGACY: [RegExp, string][] = [
+  [/^heute(\/.*)?$/, "uebersicht"],
+  [/^protokoll(\/.*)?$/, "uebersicht/protokoll"],
+  [/^verlauf\/(atem|trinken|futter|gewicht|spo2|plan)$/, "entdecken/m/$1"],
+  [/^verlauf(\/.*)?$/, "entdecken"],
+  [/^akte\/dokumente$/, "entdecken/akte/dokumente"],
+  [/^akte\/dokument\/(.+)$/, "entdecken/akte/dokument/$1"],
+  [/^akte\/(labor|chronik|fragen)$/, "entdecken/akte/$1"],
+  [/^akte(\/.*)?$/, "entdecken"],
+  [/^mehr(\/.*)?$/, "uebersicht"],
+];
+
+const TITLES: [RegExp, string][] = [
+  [/^uebersicht$/, "Übersicht"],
+  [/^entdecken$/, "Entdecken"],
+  [/^claude$/, "Claude"],
+  [/\/protokoll$/, "Tagesprotokoll"],
+  [/\/medikamente(\/.*)?$/, "Medikamente"],
+  [/\/m\/[^/]+\/daten$/, "Alle Daten"],
+  [/\/m\/[^/]+$/, "Messwert"],
+  [/\/k\/[^/]+$/, "Kategorie"],
+  [/\/alle-daten$/, "Alle Daten"],
+  [/\/trends$/, "Trends"],
+  [/\/highlights$/, "Highlights"],
+  [/\/tabelle$/, "Tage im Überblick"],
+  [/\/artikel(\/.*)?$/, "Artikel"],
+  [/\/akte\/dokument(e)?(\/.*)?$/, "Dokumente"],
+  [/\/akte\/labor$/, "Laborergebnisse"],
+  [/\/akte\/chronik$/, "Chronik"],
+  [/\/akte\/fragen$/, "Fragen an die Klinik"],
+  [/\/akte\/.+$/, "Akte"],
+];
 
 export function titleOf(path: string): string {
-  const parts = path.split("/");
-  for (let n = parts.length; n > 0; n--) {
-    const t = TITLES[parts.slice(0, n).join("/")];
-    if (t) return t;
-  }
-  return "Zurück";
+  for (const [re, t] of TITLES) if (re.test(path)) return t;
+  return "Spotty";
 }
 
 function clean(path: string): string {
-  const p = decodeURIComponent(path.replace(/^#/, "")).replace(/^\/+|\/+$/g, "");
-  return p || "heute";
+  let p = path.replace(/^#/, "");
+  try {
+    p = decodeURIComponent(p);
+  } catch {
+    /* ungültige Kodierung: so lassen */
+  }
+  return p.replace(/^\/+|\/+$/g, "") || "uebersicht";
 }
 
 export function parseRoute(hash: string): Route {
-  const path = clean(hash);
-  const parts = path.split("/");
-  const tab = (TAB_IDS as string[]).includes(parts[0]) ? (parts[0] as Tab) : null;
-  if (!tab && parts[0] !== "mehr") return { path: "heute", tab: "heute", parts: ["heute"] };
-  return { path, tab, parts };
+  let path = clean(hash);
+  for (const [re, to] of LEGACY) {
+    if (re.test(path)) {
+      path = path.replace(re, to);
+      break;
+    }
+  }
+  const parts = path.split("/").filter(Boolean);
+  if (!(TAB_IDS as string[]).includes(parts[0])) return { path: "uebersicht", tab: "uebersicht", sub: [] };
+  return { path: parts.join("/"), tab: parts[0] as Tab, sub: parts.slice(1) };
 }
 
 let current: Route = parseRoute(typeof location === "undefined" ? "" : location.hash);
@@ -62,12 +84,18 @@ let lastMove: Move = "load";
 const stack: string[] = [current.path];
 let index = 0;
 const scroll = new Map<string, number>();
-const lastByTab: Partial<Record<Tab, string>> = {};
-if (current.tab) lastByTab[current.tab] = current.path;
+const lastByTab: Partial<Record<Tab, string>> = { [current.tab]: current.path };
+let lastTabRoute = current.tab === "claude" ? "uebersicht" : current.path;
 const listeners = new Set<() => void>();
 
+// Alte Adresse in der Leiste durch die neue ersetzen (z. B. aus einer Erinnerung mit #heute).
+if (typeof location !== "undefined" && clean(location.hash) !== current.path && typeof history !== "undefined") {
+  history.replaceState(null, "", `#${current.path}`);
+}
+
 function emit() {
-  if (current.tab) lastByTab[current.tab] = current.path;
+  lastByTab[current.tab] = current.path;
+  if (current.tab !== "claude") lastTabRoute = current.path;
   for (const l of listeners) l();
 }
 
@@ -118,6 +146,12 @@ export function navigate(path: string, opts: { replace?: boolean } = {}) {
   emit();
 }
 
+/** Unterseite im aktuellen Reiter öffnen, z. B. sub("m/atem"). */
+export function openSub(sub: string) {
+  const tab = current.tab === "claude" ? "uebersicht" : current.tab;
+  navigate(`${tab}/${sub}`);
+}
+
 /** Vorige Seite dieser Sitzung, falls es eine gibt. */
 export function previous(): string | null {
   return index > 0 ? stack[index - 1] : null;
@@ -130,6 +164,15 @@ export function goBack(parent: string) {
     return;
   }
   navigate(parent, { replace: true });
+}
+
+/** Claude schließen: zurück zur Seite davor, sonst zum zuletzt offenen Reiter. */
+export function closeClaude() {
+  if (index > 0 && !stack[index - 1].startsWith("claude")) {
+    history.back();
+    return;
+  }
+  navigate(lastTabRoute || "uebersicht", { replace: index === 0 });
 }
 
 /** Reiter antippen: zur zuletzt offenen Unterseite, beim aktiven Reiter zurück zu dessen Anfang. */

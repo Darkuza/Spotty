@@ -1,22 +1,24 @@
-// Einfache Ansicht für „Heute“: nur der nächste Schritt mit großer Taste, ein Tipp für das Befinden,
+// Einfache Ansicht der Übersicht: nur der nächste Schritt mit großer Taste, ein Tipp für das Befinden,
 // der Tagesablauf nach Tageszeit und Foto vom Papierprotokoll statt Eintippen.
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 import { useChecks, useEntries, usePhotos, usePlan, useProfile, saveEntry } from "../../lib/data";
+import { useNowValue } from "../../lib/now";
 import { useSheets, useToast } from "../../ui/overlays";
+import { Glyph } from "../../ui/Glyph";
 import { Icon } from "../../ui/Icon";
-import { PageHeader } from "../../ui/Page";
-import { categoryStyle } from "../../ui/kinds";
-import { AlertBanners, useDayAlerts } from "../common";
+import { Avatar, CircleButton, Group, NavBar, Row, Screen, SectionHead } from "../../ui/ios";
 import { EntrySheet } from "../entry/EntrySheet";
 import { EmergencySheet } from "../EmergencySheet";
-import { fmtDiff, useCheckActions } from "./TodayView";
+import { ProfileHub } from "../profile/ProfileHub";
+import { fmtDiff, useCheckActions } from "../plan/actions";
+import { itemColor, itemGlyph } from "../plan/planStyle";
+import { StatusLine } from "../summary/SummaryView";
 import { itemState, type ItemState } from "@shared/plan.ts";
-import { fmtDayMid, minutesOf, type BerlinNow } from "@shared/dates.ts";
+import { fmtDayMid, minutesOf } from "@shared/dates.ts";
 import { BEFINDEN_OPTS, summarize } from "@shared/entryTypes.ts";
 import type { EntryType, PlanItem } from "@shared/types.ts";
 import { uploadProtocolPhoto } from "../../lib/photos";
-import { clinicPhone } from "../../lib/profile";
 import { setViewMode } from "../../lib/viewMode";
 
 const SNOOZE_MIN = 15;
@@ -34,9 +36,10 @@ function partOf(time: string): Part {
   return "abend";
 }
 
-const MOOD_COLOR: Record<string, string> = { gut: "var(--accent)", unsicher: "var(--amber)", schlecht: "var(--red)" };
+const MOOD_COLOR: Record<string, string> = { gut: "var(--green)", unsicher: "var(--orange)", schlecht: "var(--red)" };
 
-export function SimpleToday({ now }: { now: BerlinNow }) {
+export function SimpleToday() {
+  const now = useNowValue();
   const day = now.day;
   const items = usePlan(day);
   const checks = useChecks();
@@ -45,12 +48,12 @@ export function SimpleToday({ now }: { now: BerlinNow }) {
   const profile = useProfile();
   const sheets = useSheets();
   const toast = useToast();
-  const alerts = useDayAlerts(entries, day);
   const { give, skip } = useCheckActions(day, now);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [snoozed, setSnoozed] = useState<Record<string, number>>({});
   const [openPart, setOpenPart] = useState<Part | "none" | null>(null);
+  const name = profile?.data?.name || "Spotty";
 
   const states = useMemo(() => items.map((it) => itemState(it, day, checks, entries, photos)), [items, day, checks, entries, photos]);
   const pending = items.map((it, i) => ({ it, st: states[i] })).filter((x) => !x.st.done);
@@ -95,181 +98,139 @@ export function SimpleToday({ now }: { now: BerlinNow }) {
   };
 
   return (
-    <div className="page simple">
-      <PageHeader
+    <Screen className="simple">
+      <NavBar
         title="Heute"
-        actions={
-          <button type="button" className="ib sos" onClick={() => sheets.open((close) => <EmergencySheet onClose={close} />)} aria-label="Notfall">
-            <Icon name="phone" size={22} stroke={1.9} />
-          </button>
+        large
+        trailing={
+          <>
+            <CircleButton glyph="phone" tone="red" label="Notfall" onClick={() => sheets.open((close) => <EmergencySheet onClose={close} />)} />
+            <Avatar name={name} onClick={() => sheets.open((close) => <ProfileHub onClose={close} />)} />
+          </>
         }
-        sub={<span>{fmtDayMid(day)} · einfache Ansicht</span>}
+        largeExtra={
+          <>
+            <p className="lt-sub">{fmtDayMid(day)} · einfache Ansicht</p>
+            <StatusLine />
+          </>
+        }
       />
-      <AlertBanners alerts={alerts} phone={clinicPhone(profile)} />
       <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => void onFiles(e.target.files)} />
 
-      <section className="blk" aria-label="Jetzt dran">
-        {hero ? <SimpleHero hero={hero} now={now} onAct={act} onLater={later} onSkip={skip} uploading={uploading} /> : <AllDone hasPlan={items.length > 0} />}
-      </section>
+      {hero ? <SimpleHero hero={hero} now={now} onAct={act} onLater={later} onSkip={skip} uploading={uploading} /> : <AllDone hasPlan={items.length > 0} />}
 
-      <section className="blk-l stack-s" aria-label="Wie geht es Spotty">
-        <p className="t1">Wie geht es Spotty gerade?</p>
+      <SectionHead title="Wie geht es Spotty?" />
+      <div className="card mood-card">
         <div className="mood" role="group" aria-label="Befinden">
           {BEFINDEN_OPTS.map(([v, label]) => (
-            <button key={v} type="button" aria-pressed={(lastMood?.data as Record<string, unknown> | undefined)?.befinden === v} onClick={() => mood(v)}>
-              <i style={{ background: MOOD_COLOR[v] }} aria-hidden="true" />
+            <button key={v} type="button" aria-pressed={(lastMood?.data as Record<string, unknown> | undefined)?.befinden === v} onClick={() => mood(v)} style={{ "--m": MOOD_COLOR[v] } as CSSProperties}>
+              <i aria-hidden="true" />
               {label}
             </button>
           ))}
         </div>
-        <p className="t2">{lastMood ? `Zuletzt um ${lastMood.time}: ${summarize(lastMood).replace(/^Befinden /, "")}.` : "Ein Tipp genügt. Die Familie sieht es sofort; bei „schlecht“ erscheinen die Warnzeichen."}</p>
-      </section>
+        <p className="mood-x">{lastMood ? `Zuletzt um ${lastMood.time}: ${summarize(lastMood).replace(/^Befinden /, "")}.` : "Ein Tipp genügt. Die Familie sieht es sofort; bei „schlecht“ erscheinen die Warnzeichen."}</p>
+      </div>
 
       {items.length ? (
-        <section className="blk-l stack-s" aria-label="Tagesablauf">
-          <p className="t1">Tagesablauf</p>
-          <div className="list plan">
-            {PARTS.map(([part, label]) => {
-              const rows = items.map((it, i) => ({ it, st: states[i] })).filter((x) => partOf(x.it.time) === part);
-              if (!rows.length) return null;
-              const done = rows.filter((x) => x.st.done).length;
-              const open = shownPart === part;
-              return (
-                <div key={part}>
-                  <button type="button" className="grp-btn" aria-expanded={open} onClick={() => setOpenPart(open ? "none" : part)}>
-                    <span>
-                      {label} · {rows.length} {rows.length === 1 ? "Punkt" : "Punkte"}
-                      {done ? <span className="t2">{`, ${done} erledigt`}</span> : null}
-                    </span>
-                    <span className="chev" aria-hidden="true">
-                      <Icon name="down" size={18} stroke={2.2} />
-                    </span>
-                  </button>
-                  {open ? rows.map((x) => <SimpleRow key={x.it.slot} it={x.it} st={x.st} current={x.it.slot === hero?.it.slot} onAct={() => act(x.it)} />) : null}
-                </div>
-              );
-            })}
-          </div>
-        </section>
+        <>
+          <SectionHead title="Tagesablauf" />
+          {PARTS.map(([part, label]) => {
+            const rows = items.map((it, i) => ({ it, st: states[i] })).filter((x) => partOf(x.it.time) === part);
+            if (!rows.length) return null;
+            const done = rows.filter((x) => x.st.done).length;
+            const open = shownPart === part;
+            return (
+              <Group key={part}>
+                <Row title={label} sub={`${rows.length} ${rows.length === 1 ? "Punkt" : "Punkte"}${done ? `, ${done} erledigt` : ""}`} onClick={() => setOpenPart(open ? "none" : part)} accessory={<span className={`acc-chev${open ? " open" : ""}`}><Icon name="down" size={17} stroke={2.6} /></span>} />
+                {open ? rows.map((x) => <SimpleRow key={x.it.slot} it={x.it} st={x.st} current={x.it.slot === hero?.it.slot} onAct={() => act(x.it)} />) : null}
+              </Group>
+            );
+          })}
+        </>
       ) : null}
 
-      <section className="blk-l stack-s" aria-label="Schnell festhalten">
-        <p className="t1">Schnell festhalten</p>
-        <button type="button" className="big-act" onClick={() => fileRef.current?.click()} disabled={uploading}>
-          <span className="ico lg k-claude" aria-hidden="true">
-            <Icon name="camera" size={22} stroke={1.9} />
-          </span>
-          <span className="grow">
-            <span className="t1" style={{ display: "block" }}>
-              {uploading ? "Foto wird hochgeladen …" : "Zettel fotografieren"}
-            </span>
-            <span className="t2" style={{ display: "block" }}>
-              Claude kann das Papierprotokoll danach übertragen
-            </span>
-          </span>
+      <SectionHead title="Schnell festhalten" />
+      <div className="qlog big">
+        <button type="button" className="qtile" style={{ "--cat": "var(--c-andere)" } as CSSProperties} onClick={() => fileRef.current?.click()} disabled={uploading}>
+          <Glyph name="camera" size={32} />
+          <span>{uploading ? "Lädt …" : "Zettel fotografieren"}</span>
         </button>
-        <button type="button" className="big-act" onClick={() => measure("atem", undefined, true)}>
-          <span className="ico lg k-mess" aria-hidden="true">
-            <Icon name="lungs" size={22} stroke={2} />
-          </span>
-          <span className="grow">
-            <span className="t1" style={{ display: "block" }}>
-              Atemzüge zählen
-            </span>
-            <span className="t2" style={{ display: "block" }}>
-              30 Sekunden auf den Kreis tippen
-            </span>
-          </span>
-        </button>
-      </section>
-
-      <div className="blk-l">
-        <button type="button" className="link-btn" style={{ fontSize: 16 }} onClick={() => setViewMode("voll")}>
-          Ausführliche Ansicht öffnen
+        <button type="button" className="qtile" style={{ "--cat": "var(--c-atmung)" } as CSSProperties} onClick={() => measure("atem", undefined, true)}>
+          <Glyph name="lungs" size={32} />
+          <span>Atemzüge zählen</span>
         </button>
       </div>
-    </div>
+
+      <Group>
+        <Row title="Ausführliche Ansicht öffnen" tone="blue" onClick={() => setViewMode("voll")} />
+      </Group>
+    </Screen>
   );
 }
 
-function SimpleHero({ hero, now, onAct, onLater, onSkip, uploading }: { hero: { it: PlanItem; st: ItemState }; now: BerlinNow; onAct: (it: PlanItem) => void; onLater: (it: PlanItem) => void; onSkip: (it: PlanItem) => void; uploading: boolean }) {
+function SimpleHero({ hero, now, onAct, onLater, onSkip, uploading }: { hero: { it: PlanItem; st: ItemState }; now: { minutes: number }; onAct: (it: PlanItem) => void; onLater: (it: PlanItem) => void; onSkip: (it: PlanItem) => void; uploading: boolean }) {
   const { it } = hero;
   const diff = minutesOf(it.time) - now.minutes;
   const eyebrow = diff <= -20 ? `Seit ${fmtDiff(-diff)} fällig · ${it.time}` : diff <= 10 ? `Jetzt dran · ${it.time}` : `Als Nächstes · ${it.time}`;
-  const ks = categoryStyle(it.category, it.measure);
   const label = it.kind === "check" ? (it.category === "med" ? "Gegeben" : "Erledigt") : it.kind === "mess" ? (it.measure === "atem" ? "Atemzüge zählen" : "Wert eintragen") : uploading ? "Wird hochgeladen …" : "Foto aufnehmen";
   return (
-    <div className={`hero${diff <= -20 ? " over" : diff <= 10 ? " due" : ""}`}>
-      <div className="hero-top">
-        <span className="lab">{eyebrow}</span>
-        <span className={`ico sm k-${ks.kind}`} aria-hidden="true">
-          <Icon name={ks.icon} size={17} stroke={2} />
+    <section className="shero" style={{ "--cat": itemColor(it) } as CSSProperties} aria-label="Jetzt dran">
+      <div className="shero-top">
+        <span className={`shero-lab${diff <= -20 ? " late" : ""}`}>{eyebrow}</span>
+        <span className="shero-ic" aria-hidden="true">
+          <Glyph name={itemGlyph(it)} size={30} />
         </span>
       </div>
-      <div className="stack-s" style={{ gap: 6 }}>
-        <p className="hero-title">{it.title}</p>
-        {it.detail ? (
-          <p className="t2" style={{ fontSize: 16, lineHeight: "23px" }}>
-            {it.detail}
-          </p>
-        ) : null}
-      </div>
-      <button type="button" className="btn primary xl" onClick={() => onAct(it)} disabled={it.kind === "foto" && uploading}>
-        {it.kind === "check" ? <Icon name="check" size={24} stroke={2.6} /> : it.kind === "foto" ? <Icon name="camera" size={22} /> : null}
+      <p className="shero-title">{it.title}</p>
+      {it.detail ? <p className="shero-x">{it.detail}</p> : null}
+      <button type="button" className="pill fill xl" onClick={() => onAct(it)} disabled={it.kind === "foto" && uploading}>
+        {it.kind === "check" ? <Icon name="check" size={24} stroke={2.8} /> : null}
         {label}
       </button>
-      <div className="btn-row">
-        <button type="button" className="btn" style={{ minHeight: 48 }} onClick={() => onLater(it)}>
+      <div className="shero-row">
+        <button type="button" className="pill gray lg" onClick={() => onLater(it)}>
           In {SNOOZE_MIN} Minuten
         </button>
-        <button type="button" className="btn" style={{ minHeight: 48 }} onClick={() => onSkip(it)}>
+        <button type="button" className="pill gray lg" onClick={() => onSkip(it)}>
           Ging nicht
         </button>
       </div>
-    </div>
+    </section>
   );
 }
 
 function AllDone({ hasPlan }: { hasPlan: boolean }) {
   return (
-    <div className="hero">
-      <div className="hero-main">
-        <span className="hero-time done" aria-hidden="true">
-          <Icon name="check" size={44} stroke={2.6} />
-        </span>
-        <div className="hero-body">
-          <p className="hero-title">{hasPlan ? "Alles erledigt" : "Kein Tagesplan"}</p>
-          <p className="t2">{hasPlan ? "Für heute ist nichts mehr offen." : "Für heute ist nichts geplant."}</p>
-        </div>
-      </div>
-    </div>
+    <section className="shero done" aria-label="Erledigt">
+      <span className="shero-ok" aria-hidden="true">
+        <Glyph name="checklist" size={44} />
+      </span>
+      <p className="shero-title">{hasPlan ? "Alles erledigt" : "Kein Tagesplan"}</p>
+      <p className="shero-x">{hasPlan ? "Für heute ist nichts mehr offen." : "Für heute ist nichts geplant."}</p>
+    </section>
   );
 }
 
 function SimpleRow({ it, st, current, onAct }: { it: PlanItem; st: ItemState; current: boolean; onAct: () => void }) {
-  const ks = categoryStyle(it.category, it.measure);
   return (
-    <div className={`li${st.done ? (st.skipped ? " skip" : " done") : current ? " now" : ""}`}>
-      <span className="pt">{it.time}</span>
-      <span className={`ico sm k-${ks.kind}`} aria-hidden="true">
-        <Icon name={ks.icon} size={17} stroke={2} />
+    <div className={`lrow slot-row${st.done ? (st.skipped ? " skipped" : " done") : current ? " now" : ""}`} style={{ "--cat": itemColor(it) } as CSSProperties}>
+      <span className="row-ic" aria-hidden="true">
+        <Glyph name={itemGlyph(it)} size={24} />
       </span>
-      <div className="pbody">
-        <span className="t1">{it.title}</span>
-        {st.done ? <span className={`pmeta${st.skipped ? " skip" : ""}`}>{st.skipped ? `ging nicht · ${st.at}` : `erledigt ${st.at}`}</span> : null}
-      </div>
-      <div className="pctl">
-        {st.done ? (
-          <span className={`check${st.skipped ? " skip" : " on"}`} aria-label={st.skipped ? "ging nicht" : "erledigt"} role="img">
-            <Icon name={st.skipped ? "minus" : "check"} size={20} stroke={2.6} />
-          </span>
-        ) : (
-          <button type="button" className="check" onClick={onAct} aria-label={`${it.title} ${it.kind === "check" ? "abhaken" : "eintragen"}`}>
-            <Icon name="check" size={20} stroke={2.6} />
-          </button>
-        )}
-      </div>
+      <span className="row-t">
+        <span className="row-title">
+          {it.time} · {it.title}
+        </span>
+        {st.done ? <span className="row-sub">{st.skipped ? `ging nicht · ${st.at}` : `erledigt ${st.at}`}</span> : null}
+      </span>
+      {st.done ? (
+        <span className={`slot-mark${st.skipped ? " skip" : " on"}`} aria-label={st.skipped ? "ging nicht" : "erledigt"} role="img">
+          {st.skipped ? <span className="dash" /> : <Glyph name="checklist" size={22} />}
+        </span>
+      ) : (
+        <button type="button" className="slot-mark btn-mark" onClick={onAct} aria-label={`${it.title} ${it.kind === "check" ? "abhaken" : "eintragen"}`} />
+      )}
     </div>
   );
 }
-

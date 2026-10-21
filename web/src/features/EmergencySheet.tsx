@@ -4,31 +4,14 @@ import { useChecks, useEntries, usePhotos, useProfile, useRegimens } from "../li
 import { clinicPhone, telHref } from "../lib/profile";
 import { copyText } from "../lib/files";
 import { Sheet, useToast } from "../ui/overlays";
-import { Icon } from "../ui/Icon";
+import { Glyph } from "../ui/Glyph";
+import { Group, Pill, Row } from "../ui/ios";
 import { ageAt, berlinNow, fmtDMY, fmtDayShort } from "@shared/dates.ts";
 import { itemState, itemsForDay } from "@shared/plan.ts";
 import { fmtNum, num } from "@shared/entryTypes.ts";
 import { dayStats } from "@shared/stats.ts";
 import type { Check, Entry, Photo, Profile, Regimen } from "@shared/types.ts";
-
-const SIGNS = [
-  "Atemzüge in Ruhe oder im Schlaf anhaltend über 40 pro Minute oder rasch steigend, Atmen mit offenem Maul, angestrengte Bauchatmung",
-  "Zunge oder Zahnfleisch blass, grau oder bläulich",
-  "SpO₂ unter 90 % trotz Sauerstoff, oder unter 95 %, das sich mit Sauerstoff nicht bessert",
-  "Zusammenbruch, Ohnmacht, plötzliche starke Schwäche",
-  "Schwarzer, klebriger Kot oder Erbrechen mit Blut oder kaffeesatzartigem Inhalt",
-  "Wiederholtes Erbrechen, starke Schmerzen, aufgekrümmter Rücken, harter Bauch",
-  "Husten mit Blut",
-  "Frisst und trinkt seit mehr als 24 Stunden nichts",
-];
-
-const MEANWHILE = [
-  "Ruhig bleiben und ruhig sprechen; Aufregung erhöht den Sauerstoffbedarf.",
-  "Sauerstoff vor die Nase halten (Flow-by), Kopf leicht erhöht, kühl lagern.",
-  "Nichts füttern und nicht mit der Spritze trinken lassen, solange er schwer atmet.",
-  "Zum Transport liegend tragen, nicht laufen lassen.",
-  "Die Kurzinfo unten kopieren oder vorzeigen; Medikamentenschachteln mitnehmen.",
-];
+import { MEANWHILE, SIGNS } from "./articles/articles";
 
 function summaryText(profile: Profile | null, regimens: Regimen[], checks: Check[], entries: Entry[], photos: Photo[]): string {
   const now = berlinNow();
@@ -63,10 +46,10 @@ function summaryText(profile: Profile | null, regimens: Regimen[], checks: Check
   if (lastSpo) vals.push(`SpO₂ ${fmtNum(num((lastSpo.data as Record<string, unknown>).pct))} % (${fmtDayShort(lastSpo.day)} ${lastSpo.time})`);
   if (today.trinkenN) vals.push(`heute getrunken ${fmtNum(today.trinkenMl)} ml`);
   if (vals.length) lines.push("", `Letzte Werte: ${vals.join(" · ")}`);
-  const contacts = (d.contacts || []).filter((c) => c.phone);
+  const contacts = (d.contacts || []).filter((c) => c.phone || c.emergency);
   if (contacts.length) {
     lines.push("", "Kontakte:");
-    for (const c of contacts.slice(0, 4)) lines.push(`- ${c.name}${c.role ? ` (${c.role})` : ""}: ${c.phone}`);
+    for (const c of contacts.slice(0, 4)) lines.push(`- ${c.name}${c.role ? ` (${c.role})` : ""}: ${[c.phone, c.emergency ? `Notdienst ${c.emergency}` : ""].filter(Boolean).join(", ")}`);
   }
   return lines.join("\n");
 }
@@ -79,83 +62,64 @@ export function EmergencySheet({ onClose }: { onClose: () => void }) {
   const photos = usePhotos();
   const toast = useToast();
   const phone = clinicPhone(profile);
-  const main = (profile?.data?.contacts || []).find((c) => c.phone && c.phone === phone);
-  const others = (profile?.data?.contacts || []).filter((c) => c.phone && c !== main);
+  const contacts = profile?.data?.contacts || [];
+  const main = contacts.find((c) => c.phone && c.phone === phone);
+  const emergency = contacts.find((c) => c.emergency)?.emergency || null;
+  const others = contacts.filter((c) => (c.phone || c.emergency) && c !== main);
   const text = summaryText(profile, regimens, checks, entries, photos);
   return (
     <Sheet title="Notfall" onClose={onClose}>
-      {phone ? (
-        <a className="btn danger block" href={telHref(phone)} style={{ minHeight: 60, fontSize: 18 }}>
-          <Icon name="phone" /> {main?.name ? `${main.name} anrufen` : "Klinik anrufen"}
-        </a>
-      ) : (
-        <div className="banner warn">
-          <div className="head">Keine Kliniknummer hinterlegt</div>
-          <p>Unter Akte → Übersicht → Bearbeiten → Kontakte eintragen.</p>
-        </div>
-      )}
-      {phone ? (
-        <p className="num" style={{ textAlign: "center", fontSize: 20, fontWeight: 700, userSelect: "all" }}>
-          {phone}
-        </p>
-      ) : null}
+      <div className="sos-head">
+        <span className="sos-ic" aria-hidden="true">
+          <Glyph name="phone" size={30} />
+        </span>
+        {phone ? (
+          <>
+            <Pill kind="fill" tone="red" href={telHref(phone)} ariaLabel={main?.name ? `${main.name} anrufen` : "Klinik anrufen"}>
+              Klinik anrufen
+            </Pill>
+            {main?.name ? <p className="sos-name">{main.name}</p> : null}
+            <p className="sos-num" aria-label={`Nummer ${phone}`}>
+              {phone}
+            </p>
+          </>
+        ) : (
+          <p className="sos-miss">Keine Kliniknummer hinterlegt. Unter Profil → Gesundheitsdetails → Bearbeiten → Kontakte eintragen.</p>
+        )}
+        {emergency ? (
+          <Pill kind="tint" tone="red" href={telHref(emergency)}>
+            Notdienst {emergency}
+          </Pill>
+        ) : null}
+      </div>
       {others.length ? (
-        <div className="card flush">
+        <Group header="Weitere Kontakte">
           {others.map((c, i) => (
-            <div key={i} className="erow" style={{ gridTemplateColumns: "minmax(0,1fr) auto", alignItems: "center" }}>
-              <span>
-                <span className="s" style={{ display: "block" }}>
-                  {c.name}
-                </span>
-                <span className="x num" style={{ display: "block" }}>
-                  {[c.role, c.phone].filter(Boolean).join(" · ")}
-                </span>
-              </span>
-              <a className="btn small ghost" href={telHref(c.phone || "")}>
-                <Icon name="phone" size={18} /> Anrufen
-              </a>
-            </div>
+            <Row key={i} title={c.name} wrap sub={[c.phone, c.emergency ? `Notdienst ${c.emergency}` : ""].filter(Boolean).join(" · ")} href={telHref(c.phone || c.emergency || "")} accessory={<span className="row-call">Anrufen</span>} ariaLabel={`${c.name} anrufen`} />
           ))}
-        </div>
+        </Group>
       ) : null}
-
-      <div className="section-title">
-        <h2>Sofort anrufen bei</h2>
-      </div>
-      <div className="card">
-        <ul style={{ margin: 0, paddingLeft: 20 }} className="stack-s">
-          {SIGNS.map((s) => (
-            <li key={s}>{s}</li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="section-title">
-        <h2>Bis Hilfe da ist</h2>
-      </div>
-      <div className="card">
-        <ol style={{ margin: 0, paddingLeft: 20 }} className="stack-s">
-          {MEANWHILE.map((s) => (
-            <li key={s}>{s}</li>
-          ))}
-        </ol>
-      </div>
-
-      <div className="section-title">
-        <h2>Kurzinfo für fremde Tierärzte</h2>
-      </div>
-      <pre className="card mono small" style={{ whiteSpace: "pre-wrap", margin: 0, overflowWrap: "anywhere" }}>
-        {text}
-      </pre>
-      <button
-        className="btn ghost"
-        onClick={async () => {
-          const ok = await copyText(text);
-          toast.show(ok ? "Kurzinfo kopiert" : "Kopieren nicht möglich", { error: !ok });
-        }}
-      >
-        <Icon name="copy" size={20} /> Kurzinfo kopieren
-      </button>
+      <Group header="Sofort anrufen bei">
+        {SIGNS.map((s) => (
+          <Row key={s} glyph="alert" color="var(--red)" title={s} wrap />
+        ))}
+      </Group>
+      <Group header="Bis Hilfe da ist">
+        {MEANWHILE.map((s, i) => (
+          <Row key={s} title={s} wrap accessory={<span className="row-num">{i + 1}</span>} />
+        ))}
+      </Group>
+      <Group header="Kurzinfo für fremde Tierärzte" footer="Kopieren und schicken oder vorzeigen. Enthält Probleme, heutige Medikamente, Unverträglichkeiten, letzte Werte und Kontakte.">
+        <pre className="grp-pre">{text}</pre>
+        <Row
+          title="Kurzinfo kopieren"
+          tone="blue"
+          onClick={async () => {
+            const ok = await copyText(text);
+            toast.show(ok ? "Kurzinfo kopiert" : "Kopieren nicht möglich", { error: !ok });
+          }}
+        />
+      </Group>
     </Sheet>
   );
 }

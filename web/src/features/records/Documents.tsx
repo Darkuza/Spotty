@@ -1,6 +1,6 @@
 // Dokumente: Liste aller Befunde und Berichte, Ansicht mit Originaldateien, Hochladen und Auslesen durch Claude.
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 import type { Doc, DocFile, Finding, Lab, TimelineEvent } from "@shared/types.ts";
 import { fmtDMY, fmtDayLong, isValidDay, isValidHm, todayKey } from "@shared/dates.ts";
 import { useDocs, useEvents, useLabs, saveDoc, deleteDoc, saveLab, deleteLab, saveEvent, saveQuestion, useQuestions } from "../../lib/data";
@@ -11,7 +11,10 @@ import { Sheet, useConfirm, useSheets, useToast } from "../../ui/overlays";
 import { Chips, Field, TextField, AreaField, Toggle } from "../../ui/controls";
 import { Icon } from "../../ui/Icon";
 import { useFileUrl, StorageImage } from "../../ui/StorageImage";
-import { Empty } from "../common";
+import { Glyph } from "../../ui/Glyph";
+import { CircleButton, EmptyCard, Group, NavBar, Row, Screen, SearchField, SectionHead } from "../../ui/ios";
+import { goBack, openSub } from "../../lib/route";
+import { useAsk } from "../../lib/ask";
 import { fmtLab, isOut, labValue } from "./Labs";
 
 export const KIND_LABEL: Record<string, string> = {
@@ -37,15 +40,13 @@ function docSort(a: Doc, b: Doc): number {
   return (b.doc_date || "0000").localeCompare(a.doc_date || "0000") || a.title.localeCompare(b.title, "de");
 }
 
-export function DocumentsPanel({ onAsk, onLabs }: { onAsk: (prompt: string) => void; onLabs: (date: string) => void }) {
+export function DocumentsList() {
   const docs = useDocs();
-  const sheets = useSheets();
   const [q, setQ] = useState("");
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
     return [...docs].filter((d) => !s || [d.title, d.issuer, d.summary, KIND_LABEL[d.kind]].some((x) => (x || "").toLowerCase().includes(s))).sort(docSort);
   }, [docs, q]);
-  const open = (d: Doc) => sheets.open((close) => <DocSheet docId={d.id} onClose={close} onAsk={onAsk} onLabs={onLabs} />);
   const years = new Map<string, Doc[]>();
   for (const d of list) {
     const y = d.doc_date ? d.doc_date.slice(0, 4) : "ohne Datum";
@@ -53,62 +54,29 @@ export function DocumentsPanel({ onAsk, onLabs }: { onAsk: (prompt: string) => v
     years.get(y)!.push(d);
   }
   return (
-    <div className="stack">
-      <div className="row">
-        <button className="btn primary grow" onClick={() => sheets.open((close) => <UploadSheet onClose={close} onAsk={onAsk} onLabs={onLabs} />)}>
-          <Icon name="upload" size={20} /> Dokument hinzufügen
-        </button>
-      </div>
-      {docs.length > 5 ? (
-        <div className="field">
-          <label htmlFor="doc-search" className="sr-only">
-            Dokumente durchsuchen
-          </label>
-          <input id="doc-search" type="search" placeholder="Suchen: Titel, Klinik, Befund …" value={q} onChange={(e) => setQ(e.target.value)} />
-        </div>
-      ) : null}
+    <>
+      {docs.length > 5 ? <SearchField value={q} onChange={setQ} placeholder="Titel, Klinik, Befund" /> : null}
       {!docs.length ? (
-        <div className="card">
-          <Empty title="Noch keine Dokumente">
-            <p>Befunde, Berichte und Rechnungen als PDF oder Foto hinzufügen. Claude liest sie aus und ordnet Laborwerte und Termine zu.</p>
-          </Empty>
-        </div>
+        <EmptyCard title="Noch keine Dokumente">Befunde, Berichte und Rechnungen als PDF oder Foto mit „+“ oben rechts hinzufügen. Claude liest sie aus und ordnet Laborwerte und Termine zu.</EmptyCard>
       ) : null}
       {[...years.entries()].map(([y, ds]) => (
-        <div key={y} className="stack-s">
-          <div className="section-title">
-            <h2>{y}</h2>
-            <span className="aside">{ds.length}</span>
-          </div>
-          <div className="card flush">
-            {ds.map((d) => (
-              <button key={d.id} className="doc" onClick={() => open(d)}>
-                <span className="date">
-                  {d.doc_date ? `${d.doc_date.slice(8, 10)}.${d.doc_date.slice(5, 7)}.` : "–"}
-                  <span>{d.doc_date ? d.doc_date.slice(0, 4) : ""}</span>
-                </span>
-                <span style={{ minWidth: 0 }}>
-                  <span className="title" style={{ display: "block" }}>
-                    {d.title}
-                  </span>
-                  <span className="issuer" style={{ display: "block" }}>
-                    {[KIND_LABEL[d.kind] || d.kind, d.issuer].filter(Boolean).join(" · ")}
-                  </span>
-                </span>
-                <span className="stack-s" style={{ alignItems: "flex-end", gap: 4 }}>
-                  <StatusTag status={d.status} />
-                  {d.files?.length ? (
-                    <span className="hint" style={{ whiteSpace: "nowrap" }}>
-                      {d.files.length} {d.files.length === 1 ? "Datei" : "Dateien"}
-                    </span>
-                  ) : null}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
+        <Group key={y} header={`${y} · ${ds.length}`}>
+          {ds.map((d) => (
+            <Row
+              key={d.id}
+              glyph="doc"
+              color="var(--blue)"
+              title={d.title}
+              sub={[KIND_LABEL[d.kind] || d.kind, d.issuer, d.status === "original_fehlt" ? "Original fehlt" : d.status === "ausstehend" ? "ausstehend" : "", d.files?.length ? `${d.files.length} ${d.files.length === 1 ? "Datei" : "Dateien"}` : ""].filter(Boolean).join(" · ")}
+              value={d.doc_date ? `${d.doc_date.slice(8, 10)}.${d.doc_date.slice(5, 7)}.` : undefined}
+              wrap
+              chevron
+              onClick={() => openSub(`akte/dokument/${d.id}`)}
+            />
+          ))}
+        </Group>
       ))}
-    </div>
+    </>
   );
 }
 
@@ -116,37 +84,35 @@ function FileRow({ file, onRemove }: { file: DocFile; onRemove?: () => void }) {
   const { url, error } = useFileUrl("documents", file.path);
   const isImage = file.mime.startsWith("image/");
   return (
-    <div className="erow" style={{ gridTemplateColumns: isImage ? "64px minmax(0,1fr) auto" : "28px minmax(0,1fr) auto", alignItems: "center" }}>
+    <div className="lrow file-row">
       {isImage ? (
-        <a href={url || undefined} target="_blank" rel="noreferrer" className="photo" style={{ aspectRatio: "1", width: 64 }}>
+        <a href={url || undefined} target="_blank" rel="noreferrer" className="file-thumb" aria-label={`${file.name} öffnen`}>
           <StorageImage bucket="documents" path={file.path} alt={file.name} />
         </a>
       ) : (
-        <Icon name="file" />
-      )}
-      <span style={{ minWidth: 0 }}>
-        <span className="s" style={{ display: "block", overflowWrap: "anywhere" }}>
-          {file.name}
+        <span className="row-ic" style={{ color: "var(--blue)" }} aria-hidden="true">
+          <Glyph name="doc" size={24} />
         </span>
-        <span className="x" style={{ display: "block" }}>
+      )}
+      <span className="row-t multi">
+        <span className="row-title">{file.name}</span>
+        <span className="row-sub">
           {[file.mime === "application/pdf" ? "PDF" : "Bild", fmtBytes(file.bytes)].filter(Boolean).join(" · ")}
           {error ? ` · ${error}` : ""}
         </span>
       </span>
-      <span className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
-        {url ? (
-          <a className="btn small ghost" href={url} target="_blank" rel="noreferrer">
-            Öffnen
-          </a>
-        ) : (
-          <span className="hint">…</span>
-        )}
-        {onRemove ? (
-          <button className="icon-btn" onClick={onRemove} aria-label={`${file.name} entfernen`}>
-            <Icon name="trash" size={18} />
-          </button>
-        ) : null}
-      </span>
+      {url ? (
+        <a className="pill tint" href={url} target="_blank" rel="noreferrer">
+          Öffnen
+        </a>
+      ) : (
+        <span className="row-v">…</span>
+      )}
+      {onRemove ? (
+        <button type="button" className="xb del" onClick={onRemove} aria-label={`${file.name} entfernen`}>
+          <Icon name="trash" size={15} stroke={2.2} />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -198,7 +164,7 @@ async function extractDoc(doc: Doc): Promise<DocExtraction> {
   return r.result;
 }
 
-function UploadSheet({ onClose, onAsk, onLabs }: { onClose: () => void; onAsk: (p: string) => void; onLabs: (d: string) => void }) {
+export function UploadSheet({ onClose }: { onClose: () => void }) {
   const sheets = useSheets();
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -239,7 +205,7 @@ function UploadSheet({ onClose, onAsk, onLabs }: { onClose: () => void; onAsk: (
         }
       } else toast.show("Dokument gespeichert");
       onClose();
-      sheets.open((close) => <DocSheet docId={id} onClose={close} onAsk={onAsk} onLabs={onLabs} />);
+      openSub(`akte/dokument/${id}`);
     } catch (e) {
       toast.show(e instanceof Error ? e.message : "Hochladen fehlgeschlagen", { error: true });
       setBusy(null);
@@ -247,20 +213,8 @@ function UploadSheet({ onClose, onAsk, onLabs }: { onClose: () => void; onAsk: (
   };
 
   return (
-    <Sheet
-      title="Dokument hinzufügen"
-      onClose={busy ? () => undefined : onClose}
-      footer={
-        <>
-          <button className="btn ghost" onClick={onClose} disabled={!!busy}>
-            Abbrechen
-          </button>
-          <button className="btn primary" onClick={() => void save()} disabled={!files.length || !!busy} style={{ flex: 2 }}>
-            {busy || "Speichern"}
-          </button>
-        </>
-      }
-    >
+    <Sheet title="Dokument hinzufügen" onClose={busy ? () => undefined : onClose} onDone={() => void save()} doneDisabled={!files.length || !!busy} doneLabel="Speichern">
+      {busy ? <p className="sheet-lead center">{busy}</p> : null}
       <input
         ref={inputRef}
         type="file"
@@ -470,21 +424,23 @@ export function ExtractDocReview({ doc, result, onClose }: { doc: Doc; result: D
   );
 }
 
-export function DocSheet({ docId, onClose, onAsk, onLabs }: { docId: string; onClose: () => void; onAsk: (p: string) => void; onLabs: (d: string) => void }) {
+export function DocPage({ docId, back }: { docId: string; back: string }) {
   const docs = useDocs();
   const labs = useLabs();
   const events = useEvents();
   const sheets = useSheets();
   const toast = useToast();
   const confirm = useConfirm();
+  const ask = useAsk();
   const addRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const doc = docs.find((d) => d.id === docId);
   if (!doc) {
     return (
-      <Sheet title="Dokument" onClose={onClose}>
-        <p>Dieses Dokument gibt es nicht mehr.</p>
-      </Sheet>
+      <Screen>
+        <NavBar title="Dokument" back={back} />
+        <p className="muted-c">Dieses Dokument gibt es nicht mehr.</p>
+      </Screen>
     );
   }
   const docLabs = labs.filter((l) => l.document_id === doc.id);
@@ -530,127 +486,61 @@ export function DocSheet({ docId, onClose, onAsk, onLabs }: { docId: string; onC
     if (!ok) return;
     deleteDoc(doc.id);
     backend.removeFiles("documents", doc.files.map((f) => f.path)).catch(() => undefined);
-    onClose();
+    goBack(back);
   };
 
   return (
-    <Sheet
-      title={doc.title}
-      onClose={onClose}
-      footer={
-        <>
-          <button className="btn claude" onClick={() => {
-            onClose();
-            onAsk(`Bitte erkläre mir das Dokument „${doc.title}“${doc.doc_date ? ` vom ${fmtDMY(doc.doc_date)}` : ""} in einfachen Worten: Was wurde untersucht, was ist auffällig, was bedeutet das für Spotty, und welche Fragen sollten wir dazu stellen?`);
-          }}>
-            <Icon name="claude" size={20} /> Mit Claude besprechen
-          </button>
-        </>
-      }
-    >
-      <div className="row" style={{ gap: 6 }}>
-        <span className="tag">{KIND_LABEL[doc.kind] || doc.kind}</span>
-        <StatusTag status={doc.status} />
-        {doc.source === "import" ? <span className="tag">aus der Akte</span> : null}
+    <Screen>
+      <NavBar title={doc.title} back={back} trailing={<CircleButton icon="edit" label="Bearbeiten" onClick={() => sheets.open((close) => <DocEditSheet doc={doc} onClose={close} />)} />} />
+      <div className="reg-head" style={{ "--cat": "var(--blue)" } as CSSProperties}>
+        <span className="reg-ic" aria-hidden="true">
+          <Glyph name="doc" size={40} />
+        </span>
+        <h1 className="lt center">{doc.title}</h1>
+        <p className="reg-sub">{[doc.doc_date ? fmtDayLong(doc.doc_date) : "Datum unbekannt", doc.issuer].filter(Boolean).join(" · ")}</p>
+        <p className="reg-tags">
+          <span className="tagc gray">{KIND_LABEL[doc.kind] || doc.kind}</span>
+          {doc.status === "original_fehlt" ? <span className="tagc orange">Original fehlt</span> : doc.status === "ausstehend" ? <span className="tagc blue">ausstehend</span> : null}
+          {doc.source === "import" ? <span className="tagc gray">aus der Akte</span> : null}
+        </p>
       </div>
-      <dl className="kv">
-        <dt>Datum</dt>
-        <dd>{doc.doc_date ? fmtDayLong(doc.doc_date) : "unbekannt"}</dd>
-        {doc.issuer ? (
-          <>
-            <dt>Von</dt>
-            <dd>{doc.issuer}</dd>
-          </>
-        ) : null}
-      </dl>
-      {doc.summary ? (
-        <div className="stack-s">
-          {doc.summary.split(/\n{2,}/).map((p, i) => (
-            <p key={i} style={{ whiteSpace: "pre-wrap" }}>
-              {p}
-            </p>
-          ))}
-        </div>
-      ) : (
-        <p className="hint">Noch keine Zusammenfassung.</p>
-      )}
+      <SectionHead title="Zusammenfassung" />
+      <div className="card about">
+        {doc.summary ? doc.summary.split(/\n{2,}/).map((p, i) => <p key={i}>{p}</p>) : <p className="muted-c">Noch keine Zusammenfassung.</p>}
+      </div>
       {doc.findings?.length ? (
-        <div className="stack-s">
-          <div className="section-title">
-            <h2>Einzelbefunde</h2>
-          </div>
+        <Group header="Einzelbefunde">
           {doc.findings.map((f, i) => (
-            <div key={i} className={`finding ${f.level || ""}`}>
-              <b>{f.label}</b>
-              <p>{f.text}</p>
-            </div>
+            <Row key={i} glyph={f.level === "crit" || f.level === "warn" ? "alert" : "info"} color={f.level === "crit" ? "var(--red)" : f.level === "warn" ? "var(--orange)" : "var(--label-3)"} title={f.label} sub={f.text} wrap />
           ))}
-        </div>
+        </Group>
       ) : null}
       {docLabs.length ? (
-        <div className="card stack-s">
-          <div className="row between">
-            <b>
-              {docLabs.length} Laborwerte{outLabs.length ? `, ${outLabs.length} außerhalb der Referenz` : ""}
-            </b>
-            <button
-              className="btn small ghost"
-              onClick={() => {
-                onClose();
-                onLabs(labDates[labDates.length - 1]);
-              }}
-            >
-              Ansehen
-            </button>
-          </div>
-          {outLabs.length ? <p className="small">{outLabs.map((l) => `${l.param} ${labValue(l)}${l.unit ? ` ${l.unit}` : ""}${l.flag ? ` (${l.flag})` : ""}`).join(" · ")}</p> : null}
-        </div>
+        <Group header="Laborwerte" footer={outLabs.length ? outLabs.map((l) => `${l.param} ${labValue(l)}${l.unit ? ` ${l.unit}` : ""}${l.flag ? ` (${l.flag})` : ""}`).join(" · ") : undefined}>
+          <Row glyph="flask" color="var(--blue)" title={`${docLabs.length} Laborwerte`} sub={outLabs.length ? `${outLabs.length} außerhalb der Referenz` : "alle im Referenzbereich"} chevron onClick={() => openSub(`akte/labor/${labDates[labDates.length - 1]}`)} />
+        </Group>
       ) : null}
       {docEvents.length ? (
-        <div className="stack-s">
-          <div className="section-title">
-            <h2>In der Chronik</h2>
-          </div>
+        <Group header="In der Chronik">
           {docEvents.map((e) => (
-            <p key={e.id} className="small">
-              <b className="num">{fmtDMY(e.date)}</b> {e.title}
-            </p>
+            <Row key={e.id} title={e.title} sub={fmtDMY(e.date)} wrap />
           ))}
-        </div>
+        </Group>
       ) : null}
-      <div className="section-title">
-        <h2>Dateien</h2>
-        <span className="aside">{doc.files?.length || 0}</span>
-      </div>
-      {doc.files?.length ? (
-        <div className="card flush">
-          {doc.files.map((f) => (
-            <FileRow key={f.path} file={f} onRemove={() => void removeFile(f)} />
-          ))}
-        </div>
-      ) : (
-        <p className="hint">{doc.status === "original_fehlt" ? "Das Original liegt nicht vor. Inhalt stammt aus Gesprächen und Notizen." : "Keine Datei hinterlegt."}</p>
-      )}
+      <Group header={`Dateien · ${doc.files?.length || 0}`} footer={!doc.files?.length ? (doc.status === "original_fehlt" ? "Das Original liegt nicht vor. Inhalt stammt aus Gesprächen und Notizen." : "Keine Datei hinterlegt.") : undefined}>
+        {doc.files?.map((f) => <FileRow key={f.path} file={f} onRemove={() => void removeFile(f)} />)}
+        <Row icon="plus" color="var(--blue)" title="Datei hinzufügen" tone="blue" onClick={() => !busy && addRef.current?.click()} />
+      </Group>
       <input ref={addRef} type="file" accept="application/pdf,image/*" multiple hidden onChange={(e) => {
         void addFiles(Array.from(e.target.files || []));
         e.target.value = "";
       }} />
-      <div className="grid-2">
-        <button className="btn ghost" onClick={() => addRef.current?.click()} disabled={!!busy}>
-          <Icon name="plus" size={20} /> Datei
-        </button>
-        <button className="btn ghost" onClick={() => void reread()} disabled={!!busy || !doc.files?.length}>
-          <Icon name="refresh" size={20} /> {busy && busy.startsWith("Claude") ? "Liest …" : "Auslesen"}
-        </button>
-        <button className="btn ghost" onClick={() => sheets.open((close) => <DocEditSheet doc={doc} onClose={close} />)}>
-          <Icon name="edit" size={20} /> Bearbeiten
-        </button>
-        <button className="btn danger" onClick={() => void remove()}>
-          <Icon name="trash" size={20} /> Löschen
-        </button>
-      </div>
-      {busy ? <p className="hint">{busy}</p> : null}
-    </Sheet>
+      <Group footer={busy || undefined}>
+        <Row glyph="chat" color="var(--claude)" title="Mit Claude besprechen" onClick={() => ask(`Bitte erkläre mir das Dokument „${doc.title}“${doc.doc_date ? ` vom ${fmtDMY(doc.doc_date)}` : ""} in einfachen Worten: Was wurde untersucht, was ist auffällig, was bedeutet das für Spotty, und welche Fragen sollten wir dazu stellen?`)} />
+        <Row icon="refresh" color="var(--blue)" title={busy && busy.startsWith("Claude") ? "Claude liest …" : "Erneut auslesen"} tone="blue" onClick={() => (!busy && doc.files?.length ? void reread() : undefined)} />
+        <Row title="Dokument löschen" tone="red" onClick={() => void remove()} />
+      </Group>
+    </Screen>
   );
 }
 
@@ -685,20 +575,7 @@ function DocEditSheet({ doc, onClose }: { doc: Doc; onClose: () => void }) {
     onClose();
   };
   return (
-    <Sheet
-      title="Dokument bearbeiten"
-      onClose={onClose}
-      footer={
-        <>
-          <button className="btn ghost" onClick={onClose}>
-            Abbrechen
-          </button>
-          <button className="btn primary" onClick={save} style={{ flex: 2 }}>
-            Speichern
-          </button>
-        </>
-      }
-    >
+    <Sheet title="Dokument bearbeiten" onClose={onClose} onDone={save} doneLabel="Speichern">
       <TextField label="Titel" value={title} onChange={setTitle} />
       <div className="field">
         <label htmlFor="doc-edit-date">Datum</label>

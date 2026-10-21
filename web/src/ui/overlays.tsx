@@ -5,6 +5,29 @@ import { createPortal } from "react-dom";
 import { Icon } from "./Icon";
 import { ErrorBoundary } from "./ErrorBoundary";
 
+// Escape schließt nur das oberste Fenster.
+const escStack: (() => void)[] = [];
+if (typeof document !== "undefined") {
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && escStack.length) {
+      e.preventDefault();
+      escStack[escStack.length - 1]();
+    }
+  });
+}
+function useEscape(handler: () => void) {
+  const ref = useRef(handler);
+  ref.current = handler;
+  useEffect(() => {
+    const fn = () => ref.current();
+    escStack.push(fn);
+    return () => {
+      const i = escStack.lastIndexOf(fn);
+      if (i >= 0) escStack.splice(i, 1);
+    };
+  }, []);
+}
+
 // ---------------------------------------------------------------------------
 // Sheets (stapelbar)
 // ---------------------------------------------------------------------------
@@ -58,30 +81,58 @@ export function useSheets(): SheetApi {
   return ctx;
 }
 
-export function Sheet({ title, onClose, children, footer, headerExtra }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; headerExtra?: ReactNode }) {
+export function Sheet({
+  title,
+  onClose,
+  children,
+  footer,
+  headerExtra,
+  onDone,
+  doneDisabled,
+  doneLabel,
+  hideTitle,
+  tall,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  footer?: ReactNode;
+  headerExtra?: ReactNode;
+  /** Haken oben rechts (Speichern, Fertig) */
+  onDone?: () => void;
+  doneDisabled?: boolean;
+  doneLabel?: string;
+  /** Titel nur für Screenreader, wenn der Inhalt einen eigenen großen Titel zeigt */
+  hideTitle?: boolean;
+  /** immer fast bildschirmhoch, wie Eingabeblätter in Health */
+  tall?: boolean;
+}) {
+  useEscape(onClose);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
-  }, [onClose]);
+  }, []);
   return createPortal(
     <>
       <div className="sheet-bg" onClick={onClose} />
-      <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>
-        <div className="sheet-grab" aria-hidden="true" />
-        <div className="inner sheet-head">
-          <h2>{title}</h2>
-          {headerExtra}
-          <button className="ib" onClick={onClose} aria-label="Schließen">
-            <Icon name="close" size={18} stroke={2.1} />
+      <div className={`sheet${tall ? " tall" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+        <div className="sheet-bar">
+          <button type="button" className="cb" onClick={onClose} aria-label="Schließen" title="Schließen">
+            <Icon name="close" size={19} stroke={2.4} />
           </button>
+          <h2 className={`sheet-title${hideTitle ? " sr-only" : ""}`}>{title}</h2>
+          {onDone ? (
+            <button type="button" className="cb done" onClick={onDone} disabled={doneDisabled} aria-label={doneLabel || "Fertig"} title={doneLabel || "Fertig"}>
+              <Icon name="check" size={20} stroke={2.6} />
+            </button>
+          ) : headerExtra ? (
+            headerExtra
+          ) : (
+            <span className="cb-space" aria-hidden="true" />
+          )}
         </div>
         <div className="sheet-body">
           <div className="inner">{children}</div>
@@ -97,44 +148,43 @@ export function Sheet({ title, onClose, children, footer, headerExtra }: { title
   );
 }
 
-/** Bestätigung als eigenes Sheet (window.confirm ist in eingebetteten Ansichten unzuverlässig). */
+/** Rückfrage in der Mitte des Bildschirms, wie ein iOS-Hinweisfenster. */
+function AlertDialog({ title, text, confirm, danger, onAnswer }: { title: string; text?: string; confirm: string; danger?: boolean; onAnswer: (ok: boolean) => void }) {
+  useEscape(() => onAnswer(false));
+  return createPortal(
+    <>
+      <div className="alert-bg" onClick={() => onAnswer(false)} />
+      <div className="alert" role="alertdialog" aria-modal="true" aria-label={title}>
+        <p className="alert-t">{title}</p>
+        {text ? <p className="alert-x">{text}</p> : null}
+        <div className="alert-b">
+          <button type="button" className="pill gray" onClick={() => onAnswer(false)}>
+            Abbrechen
+          </button>
+          <button type="button" className={`pill ${danger ? "gray red" : "fill"}`} onClick={() => onAnswer(true)} autoFocus>
+            {confirm}
+          </button>
+        </div>
+      </div>
+    </>,
+    document.body,
+  );
+}
+
+/** Bestätigung als eigenes Fenster (window.confirm ist in eingebetteten Ansichten unzuverlässig). */
 export function useConfirm() {
   const sheets = useSheets();
   return useCallback(
     (opts: { title: string; text?: string; confirm: string; danger?: boolean }) =>
       new Promise<boolean>((resolve) => {
         sheets.open((close) => (
-          <Sheet
-            title={opts.title}
-            onClose={() => {
-              resolve(false);
+          <AlertDialog
+            {...opts}
+            onAnswer={(ok) => {
+              resolve(ok);
               close();
             }}
-            footer={
-              <>
-                <button
-                  className="btn ghost"
-                  onClick={() => {
-                    resolve(false);
-                    close();
-                  }}
-                >
-                  Abbrechen
-                </button>
-                <button
-                  className={`btn ${opts.danger ? "danger" : "primary"}`}
-                  onClick={() => {
-                    resolve(true);
-                    close();
-                  }}
-                >
-                  {opts.confirm}
-                </button>
-              </>
-            }
-          >
-            {opts.text ? <p>{opts.text}</p> : null}
-          </Sheet>
+          />
         ));
       }),
     [sheets],

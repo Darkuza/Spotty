@@ -12,15 +12,16 @@ try {
   sharp = require("/opt/npm-tools/node_modules/sharp");
 }
 
-const TEAL = "#0e7469";
-const glyph = (stroke = "#ffffff", spot = "#f3d9a4") => `
+// Rosa Verlauf wie die Kategorie „Herz und Lunge“ in der App, Pulslinie und Punkt in Weiß
+const GRADIENT = `<defs><linearGradient id="bg" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#ff6382"/><stop offset="1" stop-color="#ff2d55"/></linearGradient></defs>`;
+const glyph = (stroke = "#ffffff", spot = "#ffffff") => `
   <path d="M84 282 H170 L218 176 L290 388 L340 282 H428" fill="none" stroke="${stroke}" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
   <circle cx="388" cy="168" r="38" fill="${spot}"/>`;
 
-const svg = ({ size = 512, radius = 112, bg = TEAL, scale = 1, stroke, spot } = {}) => {
+const svg = ({ size = 512, radius = 112, bg = "url(#bg)", scale = 1, stroke, spot } = {}) => {
   const t = (512 * (1 - scale)) / 2;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 512 512">
-  ${bg ? `<rect width="512" height="512" rx="${radius}" fill="${bg}"/>` : ""}
+  ${bg ? `${GRADIENT}<rect width="512" height="512" rx="${radius}" fill="${bg}"/>` : ""}
   <g transform="translate(${t} ${t}) scale(${scale})">${glyph(stroke, spot)}</g>
 </svg>`;
 };

@@ -19,7 +19,7 @@ export function applyTheme(t: Theme = getTheme()): void {
   else root.setAttribute("data-theme", t);
   const dark = t === "dark" || (t === "system" && window.matchMedia?.("(prefers-color-scheme: dark)").matches);
   for (const m of Array.from(document.querySelectorAll('meta[name="theme-color"]'))) {
-    m.setAttribute("content", dark ? "#0d1412" : "#f1f4f2");
+    m.setAttribute("content", dark ? "#000000" : "#f2f2f7");
     m.removeAttribute("media");
   }
 }

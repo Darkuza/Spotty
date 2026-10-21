@@ -79,20 +79,7 @@ export function ProfileSheet({ profile, onClose }: { profile: Profile | null; on
   };
 
   return (
-    <Sheet
-      title="Akte bearbeiten"
-      onClose={onClose}
-      footer={
-        <>
-          <button className="btn ghost" onClick={onClose}>
-            Abbrechen
-          </button>
-          <button className="btn primary" onClick={save} style={{ flex: 2 }}>
-            Speichern
-          </button>
-        </>
-      }
-    >
+    <Sheet title="Akte bearbeiten" onClose={onClose} onDone={save} doneLabel="Speichern">
       <div className="section-title">
         <h2>Stammdaten</h2>
       </div>
@@ -162,11 +149,12 @@ export function ProfileSheet({ profile, onClose }: { profile: Profile | null; on
             <TextField label="Rolle" value={c.role || ""} onChange={(v) => setC(i, { role: v })} placeholder="z. B. behandelnde Klinik" />
             <TextField label="Telefon" value={c.phone || ""} onChange={(v) => setC(i, { phone: v })} type="tel" />
           </div>
+          <TextField label="Notdienst (Telefon außerhalb der Sprechzeiten)" value={c.emergency || ""} onChange={(v) => setC(i, { emergency: v || null })} type="tel" />
           <TextField label="Adresse" value={c.address || ""} onChange={(v) => setC(i, { address: v })} />
           <TextField label="Notiz" value={c.note || ""} onChange={(v) => setC(i, { note: v })} />
         </div>
       ))}
-      <p className="hint">Die Notfall-Taste wählt den Kontakt, dessen Rolle „behandelnd“ oder „aktuell“ enthält, sonst den ersten mit Telefonnummer.</p>
+      <p className="hint">Die Notfall-Taste wählt den Kontakt, dessen Rolle „behandelnd“, „aktuell“ oder „Notfall“ enthält, sonst den ersten mit Telefonnummer. Eine Notdienstnummer erscheint im Notfallblatt als eigene Taste.</p>
 
       <div className="section-title">
         <h2>Weitere Angaben</h2>

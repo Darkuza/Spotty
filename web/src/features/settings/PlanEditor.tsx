@@ -9,6 +9,8 @@ import { newId, store } from "../../lib/store";
 import { Sheet, useConfirm, useSheets, useToast } from "../../ui/overlays";
 import { AreaField, Chips, Field, MultiChips, Seg, TextField, Toggle } from "../../ui/controls";
 import { Icon } from "../../ui/Icon";
+import { Group, Row } from "../../ui/ios";
+import { regimenStyle } from "../plan/planStyle";
 import { CAT_LABEL } from "../../ui/kinds";
 
 const CATS: [Category, string][] = (Object.keys(CAT_LABEL) as Category[]).map((c) => [c, CAT_LABEL[c]]);
@@ -24,40 +26,31 @@ export function PlanSheet({ onClose }: { onClose: () => void }) {
   const today = todayKey();
   const sorted = [...regs].sort((a, b) => Number(b.active) - Number(a.active) || a.sort - b.sort || a.name.localeCompare(b.name, "de"));
   const open = (r: Regimen | null) => sheets.open((close) => <RegimenSheet regimen={r} onClose={close} />);
+  const row = (r: Regimen) => {
+    const cur = stepFor(r, today);
+    const times = (r.slots || []).map((s) => s.time).join(", ");
+    const st = regimenStyle(r);
+    return (
+      <Row
+        key={r.id}
+        glyph={st.glyph}
+        color={r.active ? st.color : "var(--label-3)"}
+        title={`${r.name}${cur?.dose ? ` ${cur.dose}` : ""}`}
+        sub={`${CAT_LABEL[r.category]} · ${!r.active ? "pausiert" : cur ? `heute ${times || "ohne Uhrzeit"}` : (r.steps || []).length ? "heute nicht geplant" : "noch kein Zeitraum eingetragen"}${r.notify === false ? " · ohne Erinnerung" : ""}`}
+        chevron
+        onClick={() => open(r)}
+      />
+    );
+  };
   return (
-    <Sheet
-      title="Behandlungsplan"
-      onClose={onClose}
-      footer={
-        <button className="btn primary" onClick={() => open(null)}>
-          <Icon name="plus" size={20} /> Neuer Punkt
-        </button>
-      }
-    >
-      <p className="hint">Änderungen gelten sofort für alle. Dosen bitte nur nach Rücksprache mit der Klinik ändern.</p>
-      {!regs.length ? <p>Noch kein Plan angelegt. Er kommt mit dem Import der Akte oder lässt sich hier Punkt für Punkt anlegen.</p> : null}
-      <div className="card flush">
-        {sorted.map((r) => {
-          const cur = stepFor(r, today);
-          const times = (r.slots || []).map((s) => s.time).join(", ");
-          return (
-            <button key={r.id} className="erow" style={{ gridTemplateColumns: "minmax(0,1fr) auto", opacity: r.active ? 1 : 0.55 }} onClick={() => open(r)}>
-              <span>
-                <span className="ty">{CAT_LABEL[r.category]}</span>
-                <span className="s" style={{ display: "block" }}>
-                  {r.name}
-                  {cur?.dose ? ` ${cur.dose}` : ""}
-                </span>
-                <span className="x" style={{ display: "block" }}>
-                  {!r.active ? "pausiert" : cur ? `heute ${times || "ohne Uhrzeit"}` : (r.steps || []).length ? "heute nicht geplant" : "noch kein Zeitraum eingetragen"}
-                  {r.notify === false ? " · ohne Erinnerung" : ""}
-                </span>
-              </span>
-              <Icon name="right" size={20} />
-            </button>
-          );
-        })}
-      </div>
+    <Sheet title="Behandlungsplan" onClose={onClose} onDone={onClose} doneLabel="Fertig">
+      <p className="sheet-lead">Änderungen gelten sofort für alle. Dosen bitte nur nach Rücksprache mit der Klinik ändern.</p>
+      {!regs.length ? <p className="sheet-lead">Noch kein Plan angelegt. Er kommt mit dem Import der Akte oder lässt sich hier Punkt für Punkt anlegen.</p> : null}
+      {sorted.some((r) => r.active) ? <Group header="Aktiv">{sorted.filter((r) => r.active).map(row)}</Group> : null}
+      {sorted.some((r) => !r.active) ? <Group header="Pausiert">{sorted.filter((r) => !r.active).map(row)}</Group> : null}
+      <Group>
+        <Row icon="plus" color="var(--blue)" title="Neuer Punkt" tone="blue" onClick={() => open(null)} />
+      </Group>
     </Sheet>
   );
 }
@@ -74,7 +67,7 @@ function uniqueSlotKey(regId: string, used: Set<string>): string {
   return `${regId}-${newId().slice(0, 4)}`;
 }
 
-function RegimenSheet({ regimen, onClose }: { regimen: Regimen | null; onClose: () => void }) {
+export function RegimenSheet({ regimen, onClose }: { regimen: Regimen | null; onClose: () => void }) {
   const toast = useToast();
   const confirm = useConfirm();
   const [r, setR] = useState<Regimen>(() => (regimen ? JSON.parse(JSON.stringify(regimen)) : emptyRegimen()));

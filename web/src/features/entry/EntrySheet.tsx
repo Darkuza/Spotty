@@ -1,17 +1,20 @@
-// Eingabemaske für einen Protokolleintrag (alle Typen), inklusive Atemzähler.
+// Eingabeblatt wie in Health: X und Haken oben, Symbol und Titel, darunter Datum, Zeit und Wert,
+// weitere Angaben als Zeilen, Auswahl als Segmente oder Menü. Atemzüge mit Zähler.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { Sheet, useConfirm, useToast } from "../../ui/overlays";
-import { Chips, Field, MultiChips } from "../../ui/controls";
-import { TYPES, entryAlert, fmtNum, num, type FieldDef } from "@shared/entryTypes.ts";
+import { Glyph } from "../../ui/Glyph";
+import { Icon } from "../../ui/Icon";
+import { Group, Row, Segmented } from "../../ui/ios";
+import { TYPES, entryAlert, fmtNum, num, type FieldDef, type Opt } from "@shared/entryTypes.ts";
 import type { Entry, EntryType, Regimen } from "@shared/types.ts";
-import { addDays, berlinNow, isValidHm } from "@shared/dates.ts";
+import { addDays, berlinNow, isValidDay, isValidHm } from "@shared/dates.ts";
 import { autoSlot, itemsForDay } from "@shared/plan.ts";
 import { dayStats } from "@shared/stats.ts";
 import { deleteEntry, saveEntry } from "../../lib/data";
 import { store } from "../../lib/store";
+import { quickStyle } from "../../lib/health/entryStyle";
 import { BreathCounter } from "./BreathCounter";
-import { Icon } from "../../ui/Icon";
 
 type Vals = Record<string, string | string[] | null>;
 
@@ -25,17 +28,17 @@ function remembered(type: EntryType, k: string): string | null {
   }
 }
 
-function initialVals(type: EntryType, entry?: Entry | null): Vals {
+function initialVals(type: EntryType, entry?: Entry | null, preset?: Record<string, unknown>): Vals {
   const v: Vals = {};
   for (const f of TYPES[type].fields) {
-    const raw = entry?.data?.[f.k];
+    const raw = entry?.data?.[f.k] ?? (entry ? undefined : preset?.[f.k]);
     const last = !entry && f.remember ? remembered(type, f.k) : null;
     if (raw !== undefined && raw !== null) {
       v[f.k] = Array.isArray(raw) ? (raw as string[]) : f.t === "num" ? String(raw).replace(".", ",") : String(raw);
     } else if (last) {
       v[f.k] = last;
     } else if (f.def !== undefined) {
-      v[f.k] = f.t === "num" ? String(f.def) : String(f.def);
+      v[f.k] = String(f.def);
     } else v[f.k] = f.t === "multi" ? [] : null;
   }
   return v;
@@ -69,29 +72,49 @@ function validate(type: EntryType, vals: Vals): { data: Record<string, unknown>;
   return { data, error: null };
 }
 
+const optVal = (o: Opt) => (Array.isArray(o) ? o[0] : o);
+const optText = (o: Opt) => (Array.isArray(o) ? o[1] : o);
+
+/** Zwei oder drei kurze Möglichkeiten passen als Segmente nebeneinander. */
+function asSegments(f: FieldDef): boolean {
+  const opts = f.opts || [];
+  if (opts.length < 2 || opts.length > 3) return false;
+  const total = opts.reduce((a, o) => a + optText(o).length, 0);
+  return total <= (opts.length === 2 ? 30 : 26);
+}
+
 export interface EntrySheetProps {
   type: EntryType;
   day: string;
   slot?: string | null;
   entry?: Entry | null;
   startCounter?: boolean;
+  /** Vorbelegung für neue Einträge, z. B. eine Schnellauswahl */
+  preset?: Record<string, unknown>;
   onClose: () => void;
 }
 
-export function EntrySheet({ type, day, slot, entry, startCounter, onClose }: EntrySheetProps) {
+export function EntrySheet({ type, day, slot, entry, startCounter, preset, onClose }: EntrySheetProps) {
   const def = TYPES[type];
   const toast = useToast();
   const confirm = useConfirm();
-  const [vals, setVals] = useState<Vals>(() => initialVals(type, entry));
+  const style = quickStyle(type);
+  const [vals, setVals] = useState<Vals>(() => initialVals(type, entry, preset));
   const [time, setTime] = useState<string>(() => entry?.time || berlinNow().hm);
+  const [date, setDate] = useState<string>(() => entry?.day || day);
   const [error, setError] = useState<string | null>(null);
   const [counter, setCounter] = useState<boolean>(!!startCounter && type === "atem" && !entry);
-  const set = (k: string, v: string | string[] | null) => setVals((s) => ({ ...s, [k]: v }));
+  const set = (k: string, v: string | string[] | null) => {
+    setError(null);
+    setVals((s) => ({ ...s, [k]: v }));
+  };
 
   const preview = useMemo(() => {
     const { data } = validate(type, vals);
     return entryAlert({ type, data });
   }, [type, vals]);
+  const required = def.fields.filter((f) => f.req);
+  const ready = required.every((f) => (f.t === "num" ? num(vals[f.k]) !== null : typeof vals[f.k] === "string" && (vals[f.k] as string).trim())) && isValidHm(time) && isValidDay(date);
 
   const save = () => {
     const { data, error: err } = validate(type, vals);
@@ -99,23 +122,22 @@ export function EntrySheet({ type, day, slot, entry, startCounter, onClose }: En
       setError(err);
       return;
     }
-    if (!isValidHm(time)) {
-      setError("Bitte eine gültige Uhrzeit eintragen.");
+    if (!isValidHm(time) || !isValidDay(date)) {
+      setError("Bitte Datum und Uhrzeit prüfen.");
       return;
     }
-    let useSlot = entry?.slot ?? slot ?? null;
+    let useSlot: string | null = entry && entry.day === date ? (entry.slot ?? null) : date === day ? (slot ?? null) : null;
     if (!useSlot && def.measure) {
       const regs = store.rows<Regimen>("regimens");
-      const items = itemsForDay(regs, day);
-      const taken = new Set(store.rows<Entry>("entries").filter((e) => e.day === day && e.slot && e.id !== entry?.id).map((e) => e.slot as string));
+      const items = itemsForDay(regs, date);
+      const taken = new Set(store.rows<Entry>("entries").filter((e) => e.day === date && e.slot && e.id !== entry?.id).map((e) => e.slot as string));
       useSlot = autoSlot(items, def.measure, time, taken);
     }
-    saveEntry({ id: entry?.id, type, day, time, data, slot: useSlot, ack: entry?.ack ?? false });
+    saveEntry({ id: entry?.id, type, day: date, time, data, slot: useSlot, ack: entry?.ack ?? false });
     for (const f of def.fields) {
       // Nur neue Einträge prägen die Vorbelegung; das Bearbeiten alter Einträge lässt sie unverändert.
       if (!f.remember || entry) continue;
       try {
-        // Abgewählt heißt: beim nächsten Mal nichts vorbelegen.
         if (typeof data[f.k] === "string") localStorage.setItem(memKey(type, f.k), data[f.k] as string);
         else localStorage.removeItem(memKey(type, f.k));
       } catch {
@@ -124,7 +146,7 @@ export function EntrySheet({ type, day, slot, entry, startCounter, onClose }: En
     }
     let msg = `${def.short} gespeichert`;
     if (type === "atem" && typeof data.bpm === "number") {
-      const y = dayStats(store.rows<Entry>("entries"), addDays(day, -1));
+      const y = dayStats(store.rows<Entry>("entries"), addDays(date, -1));
       msg = `${fmtNum(data.bpm as number)}/min gespeichert${y.atemWert != null ? ` · gestern Tageswert ${fmtNum(y.atemWert)}` : ""}`;
     }
     toast.show(msg);
@@ -141,165 +163,163 @@ export function EntrySheet({ type, day, slot, entry, startCounter, onClose }: En
     }
   };
 
-  const stepOf = (f: FieldDef) => (f.dec ? 0.1 : f.unit === "ml" || f.unit === "g" ? 10 : f.unit === "min" ? 5 : 1);
-  const bump = (f: FieldDef, dir: 1 | -1) => {
-    const cur = num(vals[f.k]) ?? (f.def !== undefined ? Number(f.def) : 0);
-    const st = stepOf(f);
-    let next = Math.round((cur + dir * st) / st) * st;
-    if (f.min !== undefined) next = Math.max(f.min, next);
-    if (f.max !== undefined) next = Math.min(f.max, next);
-    set(f.k, f.dec ? next.toFixed(f.dec).replace(".", ",") : String(Math.round(next)));
-  };
+  const main = def.fields.find((f) => f.t === "num") || null;
+  const note = def.fields.find((f) => f.k === "text" && f.t === "text") || null;
+  const rest = def.fields.filter((f) => f !== main && f !== note);
 
-  const renderField = (f: FieldDef) => {
-    const v = vals[f.k];
-    if (f.t === "num") {
-      if (f.counter && counter) {
-        return (
-          <div key={f.k} className="stack-s">
-            <BreathCounter onResult={(bpm) => set(f.k, String(bpm))} />
-            <button type="button" className="link-btn" style={{ alignSelf: "center" }} onClick={() => setCounter(false)}>
-              Wert selbst eintragen
-            </button>
-          </div>
-        );
-      }
-      const text = (v as string) || "";
-      return (
-        <div key={f.k} className="field">
-          <span className="label">{f.label}</span>
-          <div className="stepper">
-            <button type="button" className="round" onClick={() => bump(f, -1)} aria-label={`${f.label}: weniger`}>
-              <Icon name="minus" size={20} stroke={2.2} />
-            </button>
-            <div className="val">
-              <input
-                type="text"
-                inputMode={f.dec ? "decimal" : "numeric"}
-                value={text}
-                placeholder="0"
-                onChange={(e) => set(f.k, e.target.value.replace(/[^0-9.,]/g, ""))}
-                aria-label={f.unit ? `${f.label} in ${f.unit}` : f.label}
-                style={{ width: `${Math.max(1, text.length || 1) + 0.3}ch` }}
-              />
-              {f.unit ? <span className="unit">{f.unit}</span> : null}
-            </div>
-            <button type="button" className="round" onClick={() => bump(f, 1)} aria-label={`${f.label}: mehr`}>
-              <Icon name="plus" size={20} stroke={2.2} />
-            </button>
-          </div>
-          {f.presets ? (
-            <div className="chips" style={{ justifyContent: "center" }}>
-              {f.presets.map(([n, label]) => (
-                <button key={n} type="button" className="chip small" aria-pressed={num(v) === n} onClick={() => set(f.k, String(n))}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {f.counter ? (
-            <button type="button" className="btn" onClick={() => setCounter(true)}>
-              <Icon name="lungs" size={19} stroke={2} /> Mit dem Zähler zählen
-            </button>
-          ) : null}
-        </div>
-      );
-    }
-    if (f.t === "chips" && (f.opts || []).length === 2) {
-      const opts = f.opts || [];
-      return (
-        <div key={f.k} className="field">
-          <span className="label">{f.label}</span>
-          <div className="seg big" role="radiogroup" aria-label={f.label}>
-            {opts.map((o) => {
-              const ov = Array.isArray(o) ? o[0] : o;
-              const ot = Array.isArray(o) ? o[1] : o;
-              const on = v === ov;
-              return (
-                <button key={ov} type="button" role="radio" aria-checked={on} onClick={() => set(f.k, on && f.def === undefined ? null : ov)}>
-                  {ot}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-    if (f.t === "chips")
-      return (
-        <Field key={f.k} label={f.label}>
-          <Chips options={f.opts || []} value={(v as string) ?? null} onChange={(nv) => set(f.k, nv)} />
-        </Field>
-      );
-    if (f.t === "multi")
-      return (
-        <Field key={f.k} label={f.label}>
-          <MultiChips options={f.opts || []} value={(v as string[]) || []} onChange={(nv) => set(f.k, nv)} />
-        </Field>
-      );
-    if (f.t === "area")
-      return (
-        <div key={f.k} className="field">
-          <label htmlFor={`f-${f.k}`}>{f.label}</label>
-          <textarea id={`f-${f.k}`} rows={4} value={(v as string) || ""} placeholder={f.ph} onChange={(e) => set(f.k, e.target.value)} />
-        </div>
-      );
+  const numRow = (f: FieldDef, isMain = false) => {
+    const text = (vals[f.k] as string) || "";
     return (
-      <div key={f.k} className="field">
-        <label htmlFor={`f-${f.k}`}>{f.label}</label>
-        <input id={`f-${f.k}`} type="text" value={(v as string) || ""} placeholder={f.ph} onChange={(e) => set(f.k, e.target.value)} />
-      </div>
+      <Row
+        key={f.k}
+        title={isMain && f.unit && f.unit !== "×" ? (type === "atem" ? "Atemzüge/min" : f.unit === "/min" ? f.label : f.unit) : f.unit ? `${f.label} (${f.unit})` : f.label}
+        accessory={
+          <input
+            className="row-input num"
+            type="text"
+            inputMode={f.dec ? "decimal" : "numeric"}
+            value={text}
+            placeholder={isMain ? "Wert" : "–"}
+            onChange={(e) => set(f.k, e.target.value.replace(/[^0-9.,]/g, ""))}
+            aria-label={f.unit ? `${f.label} in ${f.unit}` : f.label}
+            autoFocus={isMain && !entry && !counter && type !== "atem"}
+          />
+        }
+      />
     );
   };
 
-  // Die kurze Notiz steht neben der Uhrzeit, alle anderen Felder darüber.
-  const noteField = def.fields.find((f) => f.k === "text" && f.t === "text") || null;
-  const bodyFields = def.fields.filter((f) => f !== noteField);
+  const fieldBlock = (f: FieldDef) => {
+    const v = vals[f.k];
+    if (f.t === "num") return <Group key={f.k}>{numRow(f)}</Group>;
+    if (f.t === "chips" && asSegments(f)) {
+      const opts = f.opts || [];
+      return (
+        <Group key={f.k} header={f.label}>
+          <div className="grp-pad">
+            <Segmented<string>
+              label={f.label}
+              value={(v as string) || ""}
+              onChange={(nv) => set(f.k, v === nv && f.def === undefined ? null : nv)}
+              options={opts.map((o) => [optVal(o), optText(o)] as [string, string])}
+            />
+          </div>
+        </Group>
+      );
+    }
+    if (f.t === "chips") {
+      const opts = f.opts || [];
+      return (
+        <Group key={f.k}>
+          <Row
+            title={f.label}
+            accessory={
+              <span className="row-select-w">
+                <select className="row-select" value={(v as string) || ""} onChange={(e) => set(f.k, e.target.value || null)} aria-label={f.label}>
+                  {f.def === undefined ? <option value="">Auswählen</option> : null}
+                  {opts.map((o) => (
+                    <option key={optVal(o)} value={optVal(o)}>
+                      {optText(o)}
+                    </option>
+                  ))}
+                </select>
+                <Icon name="updown" size={15} stroke={2.4} />
+              </span>
+            }
+          />
+        </Group>
+      );
+    }
+    if (f.t === "multi") {
+      const cur = (v as string[]) || [];
+      return (
+        <Group key={f.k} header={f.label}>
+          {(f.opts || []).map((o) => {
+            const ov = optVal(o);
+            const on = cur.includes(ov);
+            return (
+              <Row
+                key={ov}
+                title={optText(o)}
+                onClick={() => set(f.k, on ? cur.filter((x) => x !== ov) : [...cur, ov])}
+                accessory={
+                  on ? (
+                    <span className="row-check" aria-label="gewählt">
+                      <Icon name="check" size={18} stroke={2.8} />
+                    </span>
+                  ) : null
+                }
+              />
+            );
+          })}
+        </Group>
+      );
+    }
+    if (f.t === "area")
+      return (
+        <Group key={f.k} header={f.label}>
+          <textarea className="grp-area" rows={4} value={(v as string) || ""} placeholder={f.ph} onChange={(e) => set(f.k, e.target.value)} aria-label={f.label} />
+        </Group>
+      );
+    return (
+      <Group key={f.k}>
+        <Row title={f.label} accessory={<input className="row-input" type="text" value={(v as string) || ""} placeholder={f.ph || "optional"} onChange={(e) => set(f.k, e.target.value)} aria-label={f.label} />} />
+      </Group>
+    );
+  };
+
   const bpm = type === "atem" ? num(vals.bpm) : null;
 
   return (
-    <Sheet
-      title={entry ? `${def.label} bearbeiten` : type === "atem" ? "Atemzüge zählen" : `${def.label} eintragen`}
-      onClose={onClose}
-      footer={
-        <>
-          {entry ? (
-            <button className="btn danger" onClick={remove} aria-label="Eintrag löschen" style={{ flex: "none", width: 56 }}>
-              <Icon name="trash" size={20} />
-            </button>
-          ) : null}
-          <button className="btn primary lg" onClick={save} style={{ flex: 3 }}>
-            {bpm != null ? `${fmtNum(bpm)}/min speichern` : "Speichern"}
-          </button>
-        </>
-      }
-    >
-      {def.hint && !(type === "atem" && counter) ? <p className="hint">{def.hint}</p> : null}
-      {bodyFields.map(renderField)}
-      <div style={{ display: "grid", gridTemplateColumns: noteField ? "124px minmax(0, 1fr)" : "160px", gap: 10 }}>
-        <div className="field">
-          <label htmlFor="entry-time">Uhrzeit</label>
-          <input id="entry-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-        </div>
-        {noteField ? (
-          <div className="field">
-            <label htmlFor="f-text">{noteField.label}</label>
-            <input id="f-text" type="text" value={(vals.text as string) || ""} placeholder={noteField.ph} onChange={(e) => set("text", e.target.value)} />
-          </div>
-        ) : null}
+    <Sheet title={entry ? `${def.label} bearbeiten` : def.label} onClose={onClose} onDone={save} doneDisabled={!ready} doneLabel={bpm != null ? `${fmtNum(bpm)}/min speichern` : "Speichern"} hideTitle tall>
+      <div className="entry-hero" style={{ "--cat": style.color } as CSSProperties}>
+        <span className="entry-ic" aria-hidden="true">
+          <Glyph name={style.glyph} size={44} />
+        </span>
+        <p className="entry-title">{def.label}</p>
       </div>
+
+      {main?.counter && counter ? (
+        <div className="counter-wrap">
+          <BreathCounter onResult={(n) => set(main.k, String(n))} />
+          <button type="button" className="link-c" onClick={() => setCounter(false)}>
+            Wert selbst eintragen
+          </button>
+        </div>
+      ) : null}
+
+      <Group footer={def.hint && !(type === "atem" && counter) ? def.hint : undefined}>
+        <Row title="Datum" accessory={<input className="cap-input" type="date" value={date} max={berlinNow().day} onChange={(e) => setDate(e.target.value)} aria-label="Datum" />} />
+        <Row title="Zeit" accessory={<input className="cap-input" type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Uhrzeit" />} />
+        {main ? numRow(main, true) : null}
+        {main?.counter && !counter ? <Row icon="lungs" color="var(--blue)" title="Mit dem Zähler zählen" tone="blue" onClick={() => setCounter(true)} /> : null}
+      </Group>
+
+      {main?.presets ? (
+        <div className="presets" role="group" aria-label="Schnellwahl">
+          {main.presets.map(([n, label]) => (
+            <button key={n} type="button" className={`preset${num(vals[main.k]) === n ? " on" : ""}`} onClick={() => set(main.k, String(n))}>
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {rest.map(fieldBlock)}
+      {note ? fieldBlock(note) : null}
+
       {preview ? (
-        <div className={`banner ${preview.level}`}>
-          <div className="head">
-            <Icon name="alert" size={20} /> Hinweis
-          </div>
+        <div className={`inline-alert ${preview.level}`} role="status">
+          <Glyph name="alert" size={22} />
           <p>{preview.text}</p>
         </div>
       ) : null}
-      {error ? (
-        <p className="hint" style={{ color: "var(--red-text)", fontWeight: 600 }}>
-          {error}
-        </p>
+      {error ? <p className="sheet-error">{error}</p> : null}
+
+      {entry ? (
+        <Group>
+          <Row title="Eintrag löschen" tone="red" onClick={() => void remove()} />
+        </Group>
       ) : null}
     </Sheet>
   );

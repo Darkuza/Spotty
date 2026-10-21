@@ -95,7 +95,7 @@ export function ImportSheet({ onClose }: { onClose: () => void }) {
             <button className="btn ghost block" onClick={() => inputRef.current?.click()} disabled={!!progress}>
               <Icon name="file" size={20} /> {bundle ? "Andere Datei wählen" : "Datei wählen"}
             </button>
-            <p className="hint">Am Computer lässt sich die Datei auch hierher ziehen. Am iPhone: „Datei auswählen“ und dann den Ordner in iCloud Drive öffnen.</p>
+            <p className="hint">Am Computer lässt sich die Datei auch hierher ziehen. Am iPhone: „Datei wählen“ und dann den Ordner in iCloud Drive öffnen.</p>
           </div>
         </>
       ) : null}

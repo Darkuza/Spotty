@@ -8,6 +8,10 @@ import { IS_DEMO } from "../../lib/config";
 import { Markdown } from "../../ui/Markdown";
 import { Icon } from "../../ui/Icon";
 import { Sheet, useConfirm, useSheets, useToast } from "../../ui/overlays";
+import { CircleButton, Group, NavBar, Row, Screen } from "../../ui/ios";
+import { Glyph } from "../../ui/Glyph";
+import { usePendingPrompt } from "../../lib/ask";
+import { closeClaude } from "../../lib/route";
 import { berlinOfIso, fmtDayShort } from "@shared/dates.ts";
 
 const SUGGESTIONS = [
@@ -26,7 +30,8 @@ interface Live {
   error: string | null;
 }
 
-export function AssistantView({ prompt, onPromptUsed }: { prompt: string | null; onPromptUsed: () => void }) {
+export function AssistantView() {
+  const { prompt, used: onPromptUsed } = usePendingPrompt();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [live, setLive] = useState<Live>(() => ({ thread: newId(), messages: [], streaming: null, error: null }));
   const [text, setText] = useState("");
@@ -154,76 +159,70 @@ export function AssistantView({ prompt, onPromptUsed }: { prompt: string | null;
   const history = () =>
     sheets.open((close) => (
       <Sheet title="Frühere Gespräche" onClose={close}>
-        {!threads.length ? <p className="hint">Noch keine gespeicherten Gespräche.</p> : null}
-        <div className="card flush">
-          {threads.map((t) => (
-            <div key={t.id} className="erow" style={{ gridTemplateColumns: "minmax(0,1fr) auto", alignItems: "center" }}>
-              <button
-                style={{ border: 0, background: "none", textAlign: "left", padding: 0 }}
+        {!threads.length ? <p className="sheet-lead">Noch keine gespeicherten Gespräche.</p> : null}
+        {threads.length ? (
+          <Group footer="Gespräche sind nur für dich sichtbar. Die anderen sehen ihre eigenen.">
+            {threads.map((t) => (
+              <Row
+                key={t.id}
+                title={t.title}
+                sub={`${fmtDayShort(berlinOfIso(t.updated).day)} ${berlinOfIso(t.updated).hm} · ${t.messages.length} Nachrichten`}
                 onClick={() => {
                   openThread(t);
                   close();
                 }}
-              >
-                <span className="s" style={{ display: "block" }}>
-                  {t.title}
-                </span>
-                <span className="x" style={{ display: "block" }}>
-                  {fmtDayShort(berlinOfIso(t.updated).day)} {berlinOfIso(t.updated).hm} · {t.messages.length} Nachrichten
-                </span>
-              </button>
-              <button
-                className="icon-btn"
-                aria-label="Gespräch löschen"
-                onClick={async () => {
-                  if (await confirm({ title: "Gespräch löschen?", text: t.title, confirm: "Löschen", danger: true })) {
-                    await deleteThread(t).catch(() => undefined);
-                    if (live.thread === t.id) newChat();
-                    await refresh();
-                    close();
-                  }
-                }}
-              >
-                <Icon name="trash" size={18} />
-              </button>
-            </div>
-          ))}
-        </div>
-        <p className="hint">Gespräche sind nur für dich sichtbar. Die anderen sehen ihre eigenen.</p>
+                accessory={
+                  <button
+                    type="button"
+                    className="xb del"
+                    aria-label="Gespräch löschen"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (await confirm({ title: "Gespräch löschen?", text: t.title, confirm: "Löschen", danger: true })) {
+                        await deleteThread(t).catch(() => undefined);
+                        if (live.thread === t.id) newChat();
+                        await refresh();
+                        close();
+                      }
+                    }}
+                  >
+                    <Icon name="trash" size={15} stroke={2.2} />
+                  </button>
+                }
+              />
+            ))}
+          </Group>
+        ) : null}
       </Sheet>
     ));
 
   const empty = !live.messages.length && !busy;
 
   return (
-    <div className="stack" style={{ minHeight: "calc(100dvh - 220px)" }}>
-      <div className="row between">
-        <button className="btn small ghost" onClick={history}>
-          Frühere Gespräche{threads.length ? ` (${threads.length})` : ""}
-        </button>
-        {!empty ? (
-          <button className="btn small ghost" onClick={newChat}>
-            <Icon name="plus" size={18} /> Neues Gespräch
-          </button>
-        ) : null}
-      </div>
-
+    <Screen className="claude-page">
+      <NavBar
+        title="Claude"
+        onClose={closeClaude}
+        trailing={
+          <>
+            <CircleButton icon="history" label={`Frühere Gespräche${threads.length ? ` (${threads.length})` : ""}`} onClick={history} />
+            <CircleButton icon="compose" label="Neues Gespräch" onClick={newChat} disabled={empty} />
+          </>
+        }
+      />
       {empty ? (
-        <div className="stack">
-          <div className="card stack-s">
-            <b>Claude kennt die ganze Akte</b>
-            <p className="small">
-              Befunde, Laborwerte, Chronik, Behandlungsplan, die Protokolle der letzten zwei Wochen und die offenen Fragen an die Klinik. Claude nennt dazu Datum und Quelle und trennt Befund, Beobachtung und eigene Einschätzung. Dosierungen ändert nur die Klinik.
-            </p>
-            {IS_DEMO ? <p className="hint">Demo-Modus: noch ohne Verbindung zu Claude.</p> : null}
-          </div>
-          <div className="suggest">
-            {SUGGESTIONS.map((s) => (
-              <button key={s} onClick={() => void send(s, true)}>
-                {s}
-              </button>
+        <div className="claude-empty">
+          <span className="claude-ic" aria-hidden="true">
+            <Glyph name="chat" size={40} />
+          </span>
+          <p className="claude-t">Frag Claude zu Spotty</p>
+          <p className="claude-x">Claude kennt Befunde, Laborwerte, Chronik, Behandlungsplan, die Protokolle der letzten zwei Wochen und die offenen Fragen an die Klinik. Dosierungen ändert nur die Klinik.</p>
+          {IS_DEMO ? <p className="claude-x">Demo-Modus: noch ohne Verbindung zu Claude.</p> : null}
+          <Group header="Vorschläge">
+            {SUGGESTIONS.map((q) => (
+              <Row key={q} title={q} wrap tone="blue" onClick={() => void send(q, true)} />
             ))}
-          </div>
+          </Group>
         </div>
       ) : (
         <div className="chat" aria-live="polite">
@@ -273,7 +272,6 @@ export function AssistantView({ prompt, onPromptUsed }: { prompt: string | null;
 
       {loadError ? <p className="hint">Frühere Gespräche konnten nicht geladen werden: {loadError}</p> : null}
 
-      <div style={{ flex: 1 }} />
       <div className="composer-dock">
         {attach ? (
           <div className="attach-preview">
@@ -326,9 +324,7 @@ export function AssistantView({ prompt, onPromptUsed }: { prompt: string | null;
           </button>
         </form>
       </div>
-      <p className="hint" style={{ textAlign: "center" }}>
-        Claude ersetzt keine Tierärztin. Bei Warnzeichen die Klinik anrufen.
-      </p>
-    </div>
+      <p className="claude-foot">Claude ersetzt keine Tierärztin. Bei Warnzeichen die Klinik anrufen.</p>
+    </Screen>
   );
 }
