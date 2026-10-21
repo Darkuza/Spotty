@@ -33,6 +33,13 @@ export interface TypeDef {
 
 const NOTE: FieldDef = { k: "text", t: "text", label: "Notiz", ph: "optional" };
 
+/** Befinden auf einen Blick, z. B. aus der einfachen Ansicht. */
+export const BEFINDEN_OPTS: [string, string][] = [
+  ["gut", "gut"],
+  ["unsicher", "nicht sicher"],
+  ["schlecht", "schlecht"],
+];
+
 export const LAGE_OPTS: [string, string][] = [
   ["links", "linker Seite"],
   ["rechts", "rechter Seite"],
@@ -163,6 +170,7 @@ export const TYPES: Record<EntryType, TypeDef> = {
     label: "Beobachtung",
     short: "Beobachtung",
     fields: [
+      { k: "befinden", t: "chips", label: "Wie geht es ihm?", opts: BEFINDEN_OPTS },
       { k: "tags", t: "multi", label: "Schnellauswahl", opts: ["hechelt viel", "trinkt viel", "frisst gierig", "unruhig", "Pfotenlecken", "Schmerzzeichen", "starrt / abwesend", "schwach, müde", "munter", "spielt"] },
       { k: "text", t: "area", label: "Beobachtung", ph: "Was ist aufgefallen?" },
     ],
@@ -248,7 +256,7 @@ export function summarize(e: Pick<Entry, "type" | "data">): string {
     case "med":
       return [s(d.name), s(d.dosis), s(d.grund)].filter(Boolean).join(" · ");
     case "notiz":
-      return Array.isArray(d.tags) ? (d.tags as string[]).join(" · ") : "";
+      return [d.befinden ? `Befinden ${optLabel("notiz", "befinden", d.befinden)}` : "", ...(Array.isArray(d.tags) ? (d.tags as string[]) : [])].filter(Boolean).join(" · ");
   }
   return "";
 }
@@ -274,6 +282,9 @@ export function entryAlert(e: Pick<Entry, "type" | "data">): Alert | null {
     if (d.pulsOk === "nein") return { level: "info", text: "Gerätepuls passt nicht zum Herzschlag: Wert nicht verwertbar. Sensor neu anlegen und wiederholen." };
     if (p != null && p < 90) return { level: "crit", text: "SpO₂ unter 90 %: Sauerstoff (Flow-by) vor die Nase halten und sofort die Klinik anrufen." };
     if (p != null && p < 95) return { level: "warn", text: `SpO₂ ${fmtNum(p)} %: Flow-by vor die Nase, in 10 Minuten an derselben Stelle wiederholen. Bleibt der Wert unter 95 %, Klinik anrufen.` };
+  }
+  if (e.type === "notiz" && d.befinden === "schlecht") {
+    return { level: "warn", text: "Befinden „schlecht“ eingetragen: Warnzeichen prüfen (rote Taste oben) und bei Bedarf die Klinik anrufen." };
   }
   if (e.type === "futter" && d.reaktion === "Schmerzreaktion") {
     return { level: "warn", text: "Schmerzreaktion nach dem Fressen: Portionen verkleinern. Bei deutlichen Schmerzen Klinik anrufen und kein eigenes Schmerzmittel geben." };

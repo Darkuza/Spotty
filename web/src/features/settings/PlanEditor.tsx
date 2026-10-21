@@ -9,7 +9,7 @@ import { newId, store } from "../../lib/store";
 import { Sheet, useConfirm, useSheets, useToast } from "../../ui/overlays";
 import { AreaField, Chips, Field, MultiChips, Seg, TextField, Toggle } from "../../ui/controls";
 import { Icon } from "../../ui/Icon";
-import { CAT_LABEL } from "../common";
+import { CAT_LABEL } from "../../ui/kinds";
 
 const CATS: [Category, string][] = (Object.keys(CAT_LABEL) as Category[]).map((c) => [c, CAT_LABEL[c]]);
 const MEASURES: [Measure, string][] = [

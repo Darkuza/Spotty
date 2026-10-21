@@ -48,7 +48,7 @@ function summaryText(profile: Profile | null, regimens: Regimen[], checks: Check
     lines.push("", `Medikamente heute (${fmtDayShort(now.day)}):`);
     for (const it of items) {
       const st = itemState(it, now.day, checks, entries, photos);
-      lines.push(`- ${it.time} ${it.title}${st.done ? ` – gegeben ${st.at}` : ""}`);
+      lines.push(`- ${it.time} ${it.title}${st.skipped ? " – ausgelassen" : st.done ? ` – gegeben ${st.at}` : ""}`);
     }
   }
   if (d.allergies?.length) {

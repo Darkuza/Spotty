@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Sheet, useConfirm, useToast } from "../../ui/overlays";
-import { Chips, Field, MultiChips, NumberInput } from "../../ui/controls";
+import { Chips, Field, MultiChips } from "../../ui/controls";
 import { TYPES, entryAlert, fmtNum, num, type FieldDef } from "@shared/entryTypes.ts";
 import type { Entry, EntryType, Regimen } from "@shared/types.ts";
 import { addDays, berlinNow, isValidHm } from "@shared/dates.ts";
@@ -64,7 +64,7 @@ function validate(type: EntryType, vals: Vals): { data: Record<string, unknown>;
       data[f.k] = s;
     }
   }
-  if (type === "notiz" && !data.text && !(Array.isArray(data.tags) && data.tags.length)) return { data, error: "Bitte eine Beobachtung eintragen oder auswählen." };
+  if (type === "notiz" && !data.text && !data.befinden && !(Array.isArray(data.tags) && data.tags.length)) return { data, error: "Bitte eine Beobachtung eintragen oder auswählen." };
   if (type === "kot" && Object.keys(data).length === 0) return { data, error: "Bitte mindestens Beschaffenheit oder Farbe wählen." };
   return { data, error: null };
 }
@@ -141,21 +141,55 @@ export function EntrySheet({ type, day, slot, entry, startCounter, onClose }: En
     }
   };
 
+  const stepOf = (f: FieldDef) => (f.dec ? 0.1 : f.unit === "ml" || f.unit === "g" ? 10 : f.unit === "min" ? 5 : 1);
+  const bump = (f: FieldDef, dir: 1 | -1) => {
+    const cur = num(vals[f.k]) ?? (f.def !== undefined ? Number(f.def) : 0);
+    const st = stepOf(f);
+    let next = Math.round((cur + dir * st) / st) * st;
+    if (f.min !== undefined) next = Math.max(f.min, next);
+    if (f.max !== undefined) next = Math.min(f.max, next);
+    set(f.k, f.dec ? next.toFixed(f.dec).replace(".", ",") : String(Math.round(next)));
+  };
+
   const renderField = (f: FieldDef) => {
     const v = vals[f.k];
     if (f.t === "num") {
+      if (f.counter && counter) {
+        return (
+          <div key={f.k} className="stack-s">
+            <BreathCounter onResult={(bpm) => set(f.k, String(bpm))} />
+            <button type="button" className="link-btn" style={{ alignSelf: "center" }} onClick={() => setCounter(false)}>
+              Wert selbst eintragen
+            </button>
+          </div>
+        );
+      }
+      const text = (v as string) || "";
       return (
-        <Field key={f.k} label={f.label}>
-          <div className="row">
-            <NumberInput value={(v as string) || ""} onChange={(nv) => set(f.k, nv)} unit={f.unit} dec={f.dec} />
-            {f.counter ? (
-              <button type="button" className="btn ghost small" onClick={() => setCounter((c) => !c)}>
-                {counter ? "Zähler ausblenden" : "Zählen"}
-              </button>
-            ) : null}
+        <div key={f.k} className="field">
+          <span className="label">{f.label}</span>
+          <div className="stepper">
+            <button type="button" className="round" onClick={() => bump(f, -1)} aria-label={`${f.label}: weniger`}>
+              <Icon name="minus" size={20} stroke={2.2} />
+            </button>
+            <div className="val">
+              <input
+                type="text"
+                inputMode={f.dec ? "decimal" : "numeric"}
+                value={text}
+                placeholder="0"
+                onChange={(e) => set(f.k, e.target.value.replace(/[^0-9.,]/g, ""))}
+                aria-label={f.unit ? `${f.label} in ${f.unit}` : f.label}
+                style={{ width: `${Math.max(1, text.length || 1) + 0.3}ch` }}
+              />
+              {f.unit ? <span className="unit">{f.unit}</span> : null}
+            </div>
+            <button type="button" className="round" onClick={() => bump(f, 1)} aria-label={`${f.label}: mehr`}>
+              <Icon name="plus" size={20} stroke={2.2} />
+            </button>
           </div>
           {f.presets ? (
-            <div className="chips">
+            <div className="chips" style={{ justifyContent: "center" }}>
               {f.presets.map(([n, label]) => (
                 <button key={n} type="button" className="chip small" aria-pressed={num(v) === n} onClick={() => set(f.k, String(n))}>
                   {label}
@@ -163,14 +197,32 @@ export function EntrySheet({ type, day, slot, entry, startCounter, onClose }: En
               ))}
             </div>
           ) : null}
-          {f.counter && counter ? (
-            <BreathCounter
-              onResult={(bpm) => {
-                set(f.k, String(bpm));
-              }}
-            />
+          {f.counter ? (
+            <button type="button" className="btn" onClick={() => setCounter(true)}>
+              <Icon name="lungs" size={19} stroke={2} /> Mit dem Zähler zählen
+            </button>
           ) : null}
-        </Field>
+        </div>
+      );
+    }
+    if (f.t === "chips" && (f.opts || []).length === 2) {
+      const opts = f.opts || [];
+      return (
+        <div key={f.k} className="field">
+          <span className="label">{f.label}</span>
+          <div className="seg big" role="radiogroup" aria-label={f.label}>
+            {opts.map((o) => {
+              const ov = Array.isArray(o) ? o[0] : o;
+              const ot = Array.isArray(o) ? o[1] : o;
+              const on = v === ov;
+              return (
+                <button key={ov} type="button" role="radio" aria-checked={on} onClick={() => set(f.k, on && f.def === undefined ? null : ov)}>
+                  {ot}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       );
     }
     if (f.t === "chips")
@@ -200,28 +252,41 @@ export function EntrySheet({ type, day, slot, entry, startCounter, onClose }: En
     );
   };
 
+  // Die kurze Notiz steht neben der Uhrzeit, alle anderen Felder darüber.
+  const noteField = def.fields.find((f) => f.k === "text" && f.t === "text") || null;
+  const bodyFields = def.fields.filter((f) => f !== noteField);
+  const bpm = type === "atem" ? num(vals.bpm) : null;
+
   return (
     <Sheet
-      title={entry ? `${def.label} bearbeiten` : def.label}
+      title={entry ? `${def.label} bearbeiten` : type === "atem" ? "Atemzüge zählen" : `${def.label} eintragen`}
       onClose={onClose}
       footer={
         <>
           {entry ? (
-            <button className="btn danger" onClick={remove} aria-label="Eintrag löschen">
+            <button className="btn danger" onClick={remove} aria-label="Eintrag löschen" style={{ flex: "none", width: 56 }}>
               <Icon name="trash" size={20} />
             </button>
           ) : null}
-          <button className="btn primary" onClick={save} style={{ flex: 3 }}>
-            Speichern
+          <button className="btn primary lg" onClick={save} style={{ flex: 3 }}>
+            {bpm != null ? `${fmtNum(bpm)}/min speichern` : "Speichern"}
           </button>
         </>
       }
     >
-      {def.hint ? <p className="hint">{def.hint}</p> : null}
-      {def.fields.map(renderField)}
-      <div className="field">
-        <label htmlFor="entry-time">Uhrzeit</label>
-        <input id="entry-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ maxWidth: 160 }} />
+      {def.hint && !(type === "atem" && counter) ? <p className="hint">{def.hint}</p> : null}
+      {bodyFields.map(renderField)}
+      <div style={{ display: "grid", gridTemplateColumns: noteField ? "124px minmax(0, 1fr)" : "160px", gap: 10 }}>
+        <div className="field">
+          <label htmlFor="entry-time">Uhrzeit</label>
+          <input id="entry-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+        </div>
+        {noteField ? (
+          <div className="field">
+            <label htmlFor="f-text">{noteField.label}</label>
+            <input id="f-text" type="text" value={(vals.text as string) || ""} placeholder={noteField.ph} onChange={(e) => set("text", e.target.value)} />
+          </div>
+        ) : null}
       </div>
       {preview ? (
         <div className={`banner ${preview.level}`}>
@@ -232,7 +297,7 @@ export function EntrySheet({ type, day, slot, entry, startCounter, onClose }: En
         </div>
       ) : null}
       {error ? (
-        <p className="hint" style={{ color: "var(--danger)", fontWeight: 600 }}>
+        <p className="hint" style={{ color: "var(--red-text)", fontWeight: 600 }}>
           {error}
         </p>
       ) : null}

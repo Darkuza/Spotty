@@ -7,7 +7,9 @@ import { useConfirm, useSheets, useToast } from "../../ui/overlays";
 import { Icon } from "../../ui/Icon";
 import { Chips } from "../../ui/controls";
 import { StorageImage } from "../../ui/StorageImage";
-import { AlertBanners, DayNav, Empty, useDayAlerts } from "../common";
+import { AlertBanners, DayBar, Empty, HeaderActions, useDayAlerts } from "../common";
+import { PageHeader, Section } from "../../ui/Page";
+import { ENTRY_STYLE } from "../../ui/kinds";
 import { EntrySheet } from "../entry/EntrySheet";
 import { PhotoViewer } from "./PhotoViewer";
 import { ExtractReview } from "./ExtractReview";
@@ -138,16 +140,16 @@ export function LogView({ day, now, onDay, newSince }: { day: string; now: Berli
   const since = newSince ? berlinOfIso(new Date(newSince).toISOString()) : null;
 
   return (
-    <div className="stack">
-      <DayNav day={day} today={now.day} onChange={onDay} />
+    <div className="page">
+      <PageHeader title="Protokoll" actions={<HeaderActions />} sub={<DayBar day={day} today={now.day} onChange={onDay} />} />
       <AlertBanners alerts={alerts} phone={clinicPhone(profile)} />
       {since && (freshEntries.length || freshPhotos.length) ? (
-        <div className="banner info">
-          <div className="head">
+        <div className="note col tone-blue blk">
+          <div className="note-head">
             Neu seit {since.day === now.day ? "" : `${fmtDayShort(since.day)}, `}
             {since.hm} Uhr
           </div>
-          <p>
+          <p className="note-text">
             {[freshEntries.length ? `${freshEntries.length} ${freshEntries.length === 1 ? "Eintrag" : "Einträge"}` : "", freshPhotos.length ? `${freshPhotos.length} ${freshPhotos.length === 1 ? "Foto" : "Fotos"}` : ""].filter(Boolean).join(" und ")}
             {freshNames.length ? ` von ${freshNames.join(", ").replace(/, ([^,]*)$/, " und $1")}` : ""}
             {freshDays.length === 1 && freshDays[0] === day ? ", unten mit „neu“ markiert." : "."}
@@ -155,7 +157,7 @@ export function LogView({ day, now, onDay, newSince }: { day: string; now: Berli
           {freshDays.some((d) => d !== day) ? (
             <div className="fresh-days">
               {freshDays.map((d) => (
-                <button key={d} className="btn small ghost" aria-pressed={d === day} onClick={() => onDay(d)}>
+                <button key={d} className="btn small" aria-pressed={d === day} onClick={() => onDay(d)}>
                   {d === now.day ? "Heute" : fmtDayShort(d)}
                 </button>
               ))}
@@ -164,144 +166,150 @@ export function LogView({ day, now, onDay, newSince }: { day: string; now: Berli
         </div>
       ) : null}
 
-      <div className="section-title">
-        <h2>Eintragen</h2>
-      </div>
-      <div className="qgrid">
-        {QUICK_ORDER.map((t) => {
-          const hasAlert = dayEntries.some((e) => e.type === t && !e.ack && entryAlert(e)?.level === "crit");
-          return (
-            <button key={t} className={`qbtn${TYPES[t].measure ? " mess" : ""}${hasAlert ? " alert" : ""}`} onClick={() => open(t)}>
-              <b>{TYPES[t].short}</b>
-              <span>{quick(t) || "+"}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="section-title">
-        <h2>Tagesprotokoll (Fotos)</h2>
-        <span className="aside">{dayPhotos.length ? `${dayPhotos.length} Foto${dayPhotos.length > 1 ? "s" : ""}` : ""}</span>
-      </div>
-      <div className="card stack-s">
-        <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => void onFiles(e.target.files)} />
-        <div className="photos">
-          {dayPhotos.map((p) => (
-            <button key={p.id} className="photo" onClick={() => openPhoto(p)} aria-label={`Foto von ${p.time} öffnen`}>
-              <StorageImage bucket="photos" path={p.path} alt={`Protokollfoto ${p.time}`} />
-              <span className="cap">
-                {p.time}
-                {p.extraction ? " · gelesen" : ""}
-                {isFresh(p) ? " · neu" : ""}
-              </span>
-            </button>
-          ))}
-          {Array.from({ length: uploading }).map((_, i) => (
-            <div key={`u${i}`} className="photo busy">
-              Wird hochgeladen …
-            </div>
-          ))}
-          <button className="photo add" onClick={() => fileRef.current?.click()}>
-            <Icon name="camera" size={26} />
-            Foto hinzufügen
-          </button>
-        </div>
-        <p className="hint">
-          Fotos gehören zum oben gewählten Tag. „Mit Claude auslesen“ überträgt die handschriftlichen Zeilen als Einträge; vor dem Speichern wird jede Zeile angezeigt.
-          {IS_DEMO ? " Im Demo-Modus bleiben Fotos nur bis zum Neuladen." : ""}
-        </p>
-      </div>
-
-      <div className="section-title">
-        <h2>Einträge</h2>
-        <span className="aside">{dayEntries.length || ""}</span>
-      </div>
-      {dayEntries.length ? (
-        <div className="card flush">
-          {dayEntries.map((e) => {
-            const a = entryAlert(e);
-            const text = (e.data as Record<string, unknown>)?.text;
+      <Section title="Eintragen" first>
+        <div className="qgrid">
+          {QUICK_ORDER.map((t) => {
+            const hasAlert = dayEntries.some((e) => e.type === t && !e.ack && entryAlert(e)?.level === "crit");
+            const ks = ENTRY_STYLE[t];
+            const val = quick(t);
             return (
-              <button key={e.id} className={`erow${a && a.level !== "info" ? ` ${a.level}` : ""}`} onClick={() => open(e.type, e)}>
-                <span className="t">{e.time}</span>
-                <span>
-                  <span className="ty">
-                    {TYPES[e.type]?.short || e.type}
-                    {e.source === "foto" ? " · vom Foto" : e.source === "import" ? " · übernommen" : ""}
-                    {isFresh(e) ? <span className="tag new">neu</span> : null}
-                  </span>
-                  <span className="s" style={{ display: "block" }}>
-                    {summarize(e) || "–"}
-                  </span>
-                  {text ? (
-                    <span className="x" style={{ display: "block" }}>
-                      {String(text)}
-                    </span>
-                  ) : null}
+              <button key={t} className={`qbtn${hasAlert ? " alert" : ""}`} onClick={() => open(t)}>
+                <span className={`ico sm k-${ks.kind}`} aria-hidden="true">
+                  <Icon name={ks.icon} size={17} stroke={2} />
                 </span>
-                <span className="who">{nameOf(e.created_by)}</span>
+                <b>{TYPES[t].short}</b>
+                <span className={`qv${val ? "" : " none"}`}>{val || "+"}</span>
               </button>
             );
           })}
         </div>
-      ) : (
-        <div className="card">
-          <Empty title="Noch keine Einträge">
-            <p>Oben eine Kachel antippen, z. B. „Atemzüge“ zum Zählen oder „Trinken“ für eine Spritze Wasser.</p>
-          </Empty>
-        </div>
-      )}
+      </Section>
 
-      <div className="section-title">
-        <h2>Tagesbilanz</h2>
-      </div>
-      <div className="card stack">
-        <div className="bilanz">
-          <div>
-            <b>{fl.ml != null ? fmtNum(fl.ml) : "–"}</b>
-            <span>ml getrunken{fl.source === "papier" ? " (Papier)" : st.selbstMl ? ` · ${fmtNum(st.selbstMl)} selbst` : ""}</span>
-          </div>
-          <div>
-            <b>{fo.g != null ? fmtNum(fo.g) : "–"}</b>
-            <span>g Futter{fo.source === "papier" ? " (Papier)" : st.futterOhneMenge.length ? ` + ${st.futterOhneMenge.length}× ohne g` : ""}</span>
-          </div>
-          <div>
-            <b>{st.atemWert != null ? fmtNum(st.atemWert) : "–"}</b>
-            <span>Atemzüge/min (Tageswert)</span>
-          </div>
-          <div>
-            <b>{st.kot}</b>
-            <span>× Kot{st.kotAuff ? ` · ${st.kotAuff} auffällig` : ""}</span>
-          </div>
-          <div>
-            <b>{st.urin}</b>
-            <span>× Urin{st.lastUrin ? ` · zuletzt ${st.lastUrin}` : ""}</span>
-          </div>
-          <div>
-            <b>{st.spo2Min != null ? fmtNum(st.spo2Min) : "–"}</b>
-            <span>SpO₂ min %</span>
+      <Section title="Tagesbilanz">
+        <div className="card">
+          <div className="bilanz">
+            <div>
+              <b className={fl.ml != null ? "" : "none"}>{fl.ml != null ? fmtNum(fl.ml) : "–"}</b>
+              <span>ml getrunken{fl.source === "papier" ? " (Papier)" : st.selbstMl ? `, ${fmtNum(st.selbstMl)} selbst` : ""}</span>
+            </div>
+            <div>
+              <b className={fo.g != null ? "" : "none"}>{fo.g != null ? fmtNum(fo.g) : "–"}</b>
+              <span>g Futter{fo.source === "papier" ? " (Papier)" : st.futterOhneMenge.length ? ` + ${st.futterOhneMenge.length}× ohne g` : ""}</span>
+            </div>
+            <div>
+              <b className={st.atemWert != null ? "" : "none"}>{st.atemWert != null ? fmtNum(st.atemWert) : "–"}</b>
+              <span>Atemzüge/min, Median</span>
+            </div>
+            <div>
+              <b className={st.kot ? "" : "none"}>{st.kot || "–"}</b>
+              <span>× Kot{st.kotAuff ? `, ${st.kotAuff} auffällig` : ""}</span>
+            </div>
+            <div>
+              <b className={st.urin ? "" : "none"}>{st.urin || "–"}</b>
+              <span>× Urin{st.lastUrin ? `, zuletzt ${st.lastUrin}` : ""}</span>
+            </div>
+            <div>
+              <b className={st.gassiN ? "" : "none"}>{st.gassiN ? fmtNum(st.gassiMin) : "–"}</b>
+              <span>min Gassi{st.spo2Min != null ? ` · SpO₂ min ${fmtNum(st.spo2Min)} %` : ""}</span>
+            </div>
           </div>
         </div>
-        <div className="divider" />
-        <div className="field">
-          <span className="label">Nacht</span>
-          <Chips options={["ruhig", "unruhig", "sehr unruhig"]} value={note?.nacht || null} onChange={(v) => saveDayNote(day, { nacht: v })} />
+      </Section>
+
+      <Section title="Papierprotokoll" aside={dayPhotos.length ? `${dayPhotos.length} ${dayPhotos.length > 1 ? "Fotos" : "Foto"}` : undefined}>
+        <div className="card stack-s">
+          <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => void onFiles(e.target.files)} />
+          <div className="photos">
+            {dayPhotos.map((p) => (
+              <button key={p.id} className="photo" onClick={() => openPhoto(p)} aria-label={`Foto von ${p.time} öffnen`}>
+                <StorageImage bucket="photos" path={p.path} alt={`Protokollfoto ${p.time}`} />
+                <span className="cap">
+                  {p.time}
+                  {p.extraction ? " · gelesen" : ""}
+                  {isFresh(p) ? " · neu" : ""}
+                </span>
+              </button>
+            ))}
+            {Array.from({ length: uploading }).map((_, i) => (
+              <div key={`u${i}`} className="photo busy">
+                Wird hochgeladen …
+              </div>
+            ))}
+            <button className="photo add" onClick={() => fileRef.current?.click()}>
+              <Icon name="camera" size={26} />
+              Foto hinzufügen
+            </button>
+          </div>
+          <p className="hint">
+            Fotos gehören zum oben gewählten Tag. „Mit Claude auslesen“ überträgt die handschriftlichen Zeilen als Einträge; vor dem Speichern wird jede Zeile angezeigt.
+            {IS_DEMO ? " Im Demo-Modus bleiben Fotos nur bis zum Neuladen." : ""}
+          </p>
         </div>
-        <div className="grid-2">
-          <PaperField label="Getrunken laut Papier (ml)" value={note?.paper_ml ?? null} onSave={(v) => saveDayNote(day, { paper_ml: v })} />
-          <PaperField label="Futter laut Papier (g)" value={note?.paper_g ?? null} onSave={(v) => saveDayNote(day, { paper_g: v })} />
+      </Section>
+
+      <Section title="Einträge" aside={dayEntries.length ? String(dayEntries.length) : undefined}>
+        {dayEntries.length ? (
+          <div className="ents">
+            {dayEntries.map((e) => {
+              const a = entryAlert(e);
+              const text = (e.data as Record<string, unknown>)?.text;
+              const ks = ENTRY_STYLE[e.type] || ENTRY_STYLE.notiz;
+              const sum = summarize(e);
+              return (
+                <button key={e.id} className={`ent${a && a.level !== "info" ? ` ${a.level}` : ""}`} onClick={() => open(e.type, e)}>
+                  <span className="tm">{e.time}</span>
+                  <span className={`dot d-${ks.kind}`} aria-hidden="true" />
+                  <span style={{ minWidth: 0 }}>
+                    <span className={`ty x-${ks.kind}`}>
+                      {TYPES[e.type]?.short || e.type}
+                      {e.source === "foto" ? <span className="t2" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500 }}>vom Foto</span> : e.source === "import" ? <span className="t2" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500 }}>übernommen</span> : null}
+                      {isFresh(e) ? <span className="tag new">neu</span> : null}
+                    </span>
+                    <span className="tx" style={{ display: "block" }}>
+                      {sum || (text ? String(text) : "–")}
+                    </span>
+                    {text && sum ? (
+                      <span className="mx" style={{ display: "block" }}>
+                        {String(text)}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="who">{nameOf(e.created_by)}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="card">
+            <Empty title="Noch keine Einträge">
+              <p>Oben eine Kachel antippen, z. B. „Atemzüge“ zum Zählen oder „Trinken“ für eine Spritze Wasser.</p>
+            </Empty>
+          </div>
+        )}
+      </Section>
+
+      <Section title="Notizen zum Tag">
+        <div className="card stack">
+          <div className="field">
+            <span className="label">Nacht</span>
+            <Chips options={["ruhig", "unruhig", "sehr unruhig"]} value={note?.nacht || null} onChange={(v) => saveDayNote(day, { nacht: v })} />
+          </div>
+          <div className="grid-2">
+            <PaperField label="Getrunken laut Papier (ml)" value={note?.paper_ml ?? null} onSave={(v) => saveDayNote(day, { paper_ml: v })} />
+            <PaperField label="Futter laut Papier (g)" value={note?.paper_g ?? null} onSave={(v) => saveDayNote(day, { paper_g: v })} />
+          </div>
+          <NoteField key={day} value={note?.note || ""} onSave={(v) => saveDayNote(day, { note: v || null })} />
+          <button
+            className="btn"
+            onClick={async () => {
+              const ok = await copyText(dayText({ regimens, checks, entries, photos, days: notes, members }, day));
+              toast.show(ok ? "Tag kopiert – zum Einfügen bereit" : "Kopieren nicht möglich", { error: !ok });
+            }}
+          >
+            <Icon name="copy" size={20} /> Tag als Text kopieren
+          </button>
         </div>
-        <NoteField key={day} value={note?.note || ""} onSave={(v) => saveDayNote(day, { note: v || null })} />
-        <button
-          className="btn ghost"
-          onClick={async () => {
-            const ok = await copyText(dayText({ regimens, checks, entries, photos, days: notes, members }, day));
-            toast.show(ok ? "Tag kopiert – zum Einfügen bereit" : "Kopieren nicht möglich", { error: !ok });
-          }}
-        >
-          <Icon name="copy" size={20} /> Tag als Text kopieren
-        </button>
-      </div>
+      </Section>
     </div>
   );
 }

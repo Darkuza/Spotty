@@ -7,6 +7,8 @@ import { useStatus } from "../../lib/store";
 import { backupJson } from "../../lib/importer";
 import { downloadText } from "../../lib/files";
 import { getTheme, setTheme, type Theme } from "../../lib/theme";
+import { setViewMode, useViewMode, type ViewMode } from "../../lib/viewMode";
+import { navigate } from "../../lib/route";
 import { Sheet, useConfirm, useSheets, useToast } from "../../ui/overlays";
 import { Seg, TextField } from "../../ui/controls";
 import { Icon } from "../../ui/Icon";
@@ -44,10 +46,11 @@ export function SettingsSheet({ onClose, onUpdate }: { onClose: () => void; onUp
   const confirm = useConfirm();
   const toast = useToast();
   const [theme, setThemeState] = useState<Theme>(getTheme());
+  const viewMode = useViewMode();
   const isAdmin = me?.role === "admin";
 
   return (
-    <Sheet title="Einstellungen" onClose={onClose}>
+    <Sheet title="Mehr" onClose={onClose}>
       <div className="section-title">
         <h2>Konto</h2>
       </div>
@@ -120,6 +123,25 @@ export function SettingsSheet({ onClose, onUpdate }: { onClose: () => void; onUp
           ["dark", "dunkel"],
         ]}
       />
+      <div className="field">
+        <span className="label">Ansicht auf diesem Gerät</span>
+        <Seg<ViewMode>
+          label="Ansicht auf diesem Gerät"
+          value={viewMode}
+          onChange={(m) => {
+            setViewMode(m);
+            if (m === "einfach") {
+              onClose();
+              navigate("heute");
+            }
+          }}
+          options={[
+            ["voll", "ausführlich"],
+            ["einfach", "einfach"],
+          ]}
+        />
+        <span className="hint">„Einfach“ zeigt auf Heute nur den nächsten Schritt mit großen Tasten, den Tagesablauf und das Foto vom Papierprotokoll.</span>
+      </div>
 
       <div className="section-title">
         <h2>App</h2>

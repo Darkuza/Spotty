@@ -65,26 +65,41 @@ export function itemsForDay(regs: Regimen[], day: string): PlanItem[] {
 }
 
 export interface ItemState {
+  /** erledigt: abgehakt, eingetragen oder bewusst ausgelassen */
   done: boolean;
+  /** bewusst ausgelassen (nur bei Häkchen) */
+  skipped: boolean;
   at: string | null;
   by: string | null;
   ref: Check | Entry | Photo | null;
 }
 
+const OPEN: ItemState = { done: false, skipped: false, at: null, by: null, ref: null };
+
 /** Ist ein Planpunkt erledigt? Medikamente über Häkchen, Messungen über Einträge mit passendem Slot, Fotos über mindestens ein Foto des Tages. */
 export function itemState(item: PlanItem, day: string, checks: Check[], entries: Entry[], photos: Photo[]): ItemState {
   if (item.kind === "check") {
     const c = checks.find((x) => x.day === day && x.slot === item.slot);
-    return c ? { done: true, at: c.time, by: c.created_by ?? null, ref: c } : { done: false, at: null, by: null, ref: null };
+    return c ? { done: true, skipped: !!c.skipped, at: c.time, by: c.created_by ?? null, ref: c } : OPEN;
   }
+  // Messungen und Fotos lassen sich ebenfalls bewusst auslassen (Häkchen mit skipped).
+  const skippedCheck = () => {
+    const c = checks.find((x) => x.day === day && x.slot === item.slot && x.skipped);
+    return c ? { done: true, skipped: true, at: c.time, by: c.created_by ?? null, ref: c } : OPEN;
+  };
   if (item.kind === "mess") {
     const es = entries.filter((e) => e.day === day && e.slot === item.slot);
     const e = es[es.length - 1];
-    return e ? { done: true, at: e.time, by: e.created_by ?? null, ref: e } : { done: false, at: null, by: null, ref: null };
+    return e ? { done: true, skipped: false, at: e.time, by: e.created_by ?? null, ref: e } : skippedCheck();
   }
   const ps = photos.filter((p) => p.day === day);
   const p = ps[0];
-  return p ? { done: true, at: p.time, by: p.created_by ?? null, ref: p } : { done: false, at: null, by: null, ref: null };
+  return p ? { done: true, skipped: false, at: p.time, by: p.created_by ?? null, ref: p } : skippedCheck();
+}
+
+/** Wurde der Punkt tatsächlich gegeben bzw. erledigt (nicht nur ausgelassen)? */
+export function itemGiven(st: ItemState): boolean {
+  return st.done && !st.skipped;
 }
 
 /** Nächster offener Messslot eines Typs, dessen Uhrzeit nahe an der Eintragszeit liegt. */

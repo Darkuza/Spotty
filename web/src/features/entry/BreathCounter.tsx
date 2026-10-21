@@ -1,6 +1,9 @@
-// Atemzähler: bei jedem Atemzug auf die Fläche tippen; nach 30 (oder 60) Sekunden wird auf eine Minute hochgerechnet.
+// Atemzähler: bei jedem Atemzug auf den Kreis tippen; nach 30 (oder 60) Sekunden wird auf eine Minute hochgerechnet.
 
 import { useEffect, useRef, useState } from "react";
+
+const R = 106;
+const C = 2 * Math.PI * R;
 
 export function BreathCounter({ onResult }: { onResult: (bpm: number, seconds: number) => void }) {
   const [duration, setDuration] = useState<30 | 60>(30);
@@ -62,52 +65,66 @@ export function BreathCounter({ onResult }: { onResult: (bpm: number, seconds: n
     setDone(false);
   };
 
-  const remaining = Math.max(0, Math.ceil(duration - elapsed));
+  const shown = Math.min(elapsed, duration);
   const estimate = start !== null && elapsed >= 8 && !done ? Math.round((count * 60) / Math.max(elapsed, 1)) : null;
   const result = done ? Math.round((count * 60) / duration) : null;
+  const fmtS = (s: number) => `0:${String(Math.floor(s)).padStart(2, "0")}`;
 
   return (
     <div className="counter">
-      <div className="row between">
+      <div className="counter-head">
         <div className="chips" role="group" aria-label="Zähldauer">
           {[30, 60].map((d) => (
-            <button key={d} className="chip small" aria-pressed={duration === d} disabled={start !== null && !done} onClick={() => setDuration(d as 30 | 60)}>
+            <button key={d} type="button" className="chip small" aria-pressed={duration === d} disabled={start !== null && !done} onClick={() => setDuration(d as 30 | 60)}>
               {d} Sekunden
             </button>
           ))}
         </div>
-        <button className="link-btn" onClick={reset}>
+        <button type="button" className="link-btn" onClick={reset} disabled={start === null}>
           Neu zählen
         </button>
       </div>
-      <button
-        type="button"
-        className={`ctpad${done ? " done" : ""}`}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          tap();
-        }}
-        onKeyDown={(e) => {
-          if (e.key === " " || e.key === "Enter") {
+      <div className={`ring${done ? " done" : ""}`}>
+        <svg width="232" height="232" viewBox="0 0 232 232" aria-hidden="true">
+          <circle className="ring-bg" cx="116" cy="116" r={R} fill="none" strokeWidth="10" />
+          <circle className="ring-fg" cx="116" cy="116" r={R} fill="none" strokeWidth="10" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - shown / duration)} transform="rotate(-90 116 116)" />
+        </svg>
+        <button
+          type="button"
+          className="ring-pad"
+          onPointerDown={(e) => {
             e.preventDefault();
             tap();
-          }
-        }}
-        aria-label="Bei jedem Atemzug tippen"
-      >
-        <span className="n num">{done ? result : count}</span>
-        <span>
-          {done
-            ? `Atemzüge pro Minute (${count} in ${duration} s)`
-            : start === null
-              ? "Beim ersten Atemzug tippen – dann bei jedem weiteren"
-              : `noch ${remaining} s${estimate ? ` · etwa ${estimate}/min` : ""}`}
-        </span>
-      </button>
-      <div className="progress" aria-hidden="true">
-        <i style={{ width: `${Math.min(100, (elapsed / duration) * 100)}%` }} />
+          }}
+          onKeyDown={(e) => {
+            if (e.key === " " || e.key === "Enter") {
+              e.preventDefault();
+              tap();
+            }
+          }}
+          aria-label={done ? `${result} Atemzüge pro Minute` : "Bei jedem Atemzug tippen"}
+        >
+          <span className="n">{done ? result : count}</span>
+          <span className="w">{done ? "pro Minute" : "Atemzüge"}</span>
+          <span className="s">{done ? `${count} in ${duration} s` : start === null ? "antippen" : `${fmtS(shown)} von ${fmtS(duration)}`}</span>
+        </button>
       </div>
-      <p className="hint">Auf den Brustkorb schauen: einmal Heben und Senken ist ein Atemzug. Am besten im Schlaf oder wenn er ruhig liegt, nicht beim Hecheln.</p>
+      <p className="t2" style={{ textAlign: "center", maxWidth: 320 }}>
+        {done ? (
+          <>Gezählt. Unten Lage und Untergrund wählen, dann speichern.</>
+        ) : start === null ? (
+          <>Beim ersten Atemzug tippen, dann bei jedem weiteren. Einmal Heben und Senken des Brustkorbs ist ein Atemzug; nicht beim Hecheln zählen.</>
+        ) : (
+          <>
+            Bei jedem Atemzug tippen.{estimate ? (
+              <>
+                {" "}
+                Hochgerechnet: <b style={{ color: "var(--ink)" }}>etwa {estimate} pro Minute</b>
+              </>
+            ) : null}
+          </>
+        )}
+      </p>
     </div>
   );
 }

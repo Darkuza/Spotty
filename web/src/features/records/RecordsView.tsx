@@ -100,7 +100,7 @@ function Overview({ now, onAsk, onDoc }: { now: BerlinNow; onAsk: (p: string) =>
     return (
       <div className="card">
         <Empty title="Die Akte ist noch leer">
-          <p>Unter Einstellungen → Akte importieren die vorbereitete Datei einlesen. Danach stehen hier Stammdaten, Problemliste, Kontakte und alle Befunde.</p>
+          <p>Unter Mehr → Akte importieren die vorbereitete Datei einlesen. Danach stehen hier Stammdaten, Problemliste, Kontakte und alle Befunde.</p>
         </Empty>
       </div>
     );

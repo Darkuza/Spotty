@@ -31,7 +31,12 @@ function stamp() {
 }
 
 export function checkItem(day: string, slot: string, time?: string) {
-  store.upsert("checks", { day, slot, time: time || berlinNow().hm, ...stamp() });
+  store.upsert("checks", { day, slot, time: time || berlinNow().hm, skipped: false, ...stamp() });
+}
+
+/** Bewusst nicht gegeben: gilt als erledigt, zählt aber nicht als Gabe. */
+export function skipItem(day: string, slot: string, time?: string, note?: string | null) {
+  store.upsert("checks", { day, slot, time: time || berlinNow().hm, skipped: true, note: note || null, ...stamp() });
 }
 
 export function setCheckTime(day: string, slot: string, time: string) {

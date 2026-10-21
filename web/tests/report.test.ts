@@ -65,7 +65,7 @@ describe("clinicReport", () => {
 
   it("berücksichtigt die Optionen", () => {
     const t2 = clinicReport(base, "2030-04-11", "2030-04-12", now, { problems: true, questions: false });
-    expect(t2).toContain("Bekannte Probleme\n1. Testproblem (aktiv)");
+    expect(t2).toContain("Bekannte Probleme\n1. Testproblem\n   Stand: aktiv");
     expect(t2).not.toContain("Offene Fragen");
   });
 });
@@ -103,5 +103,23 @@ describe("clinicReport – Sonderfälle", () => {
     expect(t).toContain("Zahnfleisch blass");
     expect(t).toContain("hustet nachts stärker");
     expect(t).toContain("ältere nicht aufgeführt");
+  });
+  it("trennt ausgelassene von vergessenen Gaben", () => {
+    const d: ClinicReportData = { ...base, checks: [{ day: "2030-04-11", slot: "ome", time: "07:00" }, { day: "2030-04-12", slot: "ome", time: "07:20", skipped: true }] };
+    const t = clinicReport(d, "2030-04-11", "2030-04-12", now);
+    expect(t).toContain("- Magentest 20 mg – 1 von 2 Gaben abgehakt; bewusst ausgelassen: 12.04. 07:00");
+  });
+
+  it("schreibt Beobachtungen ohne Schlagwort ohne leeren Strich", () => {
+    const note: Entry = { id: "n1", type: "notiz", day: "2030-04-12", time: "10:00", data: { text: "erster Versuch mit dem Spray" }, slot: null, ack: true } as Entry;
+    const t = clinicReport({ ...base, entries: [note] }, "2030-04-11", "2030-04-12", now);
+    expect(t).toContain("- 12.04. 10:00: erster Versuch mit dem Spray");
+    expect(t).not.toContain(":  –");
+  });
+
+  it("nennt selbst getrunkene Mengen", () => {
+    const drink = (time: string, ml: number, weg: string): Entry => ({ id: `t-${time}`, type: "trinken", day: "2030-04-30", time, data: { ml, weg }, slot: null, ack: true }) as Entry;
+    const t = clinicReport({ ...base, regimens: [], entries: [drink("09:00", 80, "spritze"), drink("10:40", 100, "selbst")] }, "2030-04-30", "2030-04-30", now);
+    expect(t).toContain("- Trinken heute bis 12:00 Uhr: 180 ml, davon 100 ml selbst");
   });
 });

@@ -63,6 +63,8 @@ export interface Check {
   slot: string;
   time: string;
   note?: string | null;
+  /** bewusst nicht gegeben (gilt als erledigt, zählt aber nicht als Gabe) */
+  skipped?: boolean | null;
   created_by?: string | null;
   created_at?: string;
 }
@@ -212,7 +214,7 @@ export interface ProfileData {
   allergies?: { source: string; items: string[] }[];
   history?: { date: string; text: string }[];
   problems?: { id: string; title: string; status?: string | null; since?: string | null; details?: string | null; sources?: string[] }[];
-  contacts?: { name: string; role?: string | null; phone?: string | null; address?: string | null; note?: string | null }[];
+  contacts?: { name: string; role?: string | null; phone?: string | null; emergency?: string | null; address?: string | null; note?: string | null }[];
   devices?: { name: string; note?: string | null }[];
   care_notes?: string[];
   guiding_principle?: string;

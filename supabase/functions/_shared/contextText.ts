@@ -2,7 +2,7 @@
 
 import type { Check, DayNote, Doc, Entry, Lab, Member, Photo, Profile, Question, Regimen, TimelineEvent } from "./types.ts";
 import { addDays, ageAt, dayRange, fmtDMY, fmtDayLong, fmtDayShort } from "./dates.ts";
-import { fmtAmount, itemState, itemsForDay, nextChange, stepFor } from "./plan.ts";
+import { fmtAmount, itemGiven, itemState, itemsForDay, nextChange, stepFor } from "./plan.ts";
 import { fmtNum, summarize } from "./entryTypes.ts";
 import { dayStats, foodOfDay, fluidOfDay, sortEntries } from "./stats.ts";
 
@@ -137,7 +137,7 @@ export function buildDynamic(d: ContextData, today: string, nowHm: string, daysB
     for (const it of items) {
       const st = itemState(it, today, d.checks, d.entries, d.photos);
       const who = st.done ? nameOf(d.members, st.by) : "";
-      out.push(`- ${it.time} ${it.title}${it.detail ? ` (${it.detail})` : ""}: ${st.done ? `erledigt ${st.at}${who ? ` von ${who}` : ""}` : "offen"}`);
+      out.push(`- ${it.time} ${it.title}${it.detail ? ` (${it.detail})` : ""}: ${st.skipped ? `ausgelassen (${st.at}${who ? `, ${who}` : ""})` : st.done ? `erledigt ${st.at}${who ? ` von ${who}` : ""}` : "offen"}`);
     }
   }
   const meds = d.regimens.filter((r) => r.active && (r.category === "med" || r.category === "inh"));
@@ -160,7 +160,7 @@ export function buildDynamic(d: ContextData, today: string, nowHm: string, daysB
     const fl = fluidOfDay(st);
     const fo = foodOfDay(st);
     const planned = itemsForDay(d.regimens, day).filter((it) => it.kind === "check");
-    const doneCount = planned.filter((it) => itemState(it, day, d.checks, d.entries, d.photos).done).length;
+    const doneCount = planned.filter((it) => itemGiven(itemState(it, day, d.checks, d.entries, d.photos))).length;
     out.push(
       `- ${fmtDayShort(day)}: ` +
         [

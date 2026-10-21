@@ -69,7 +69,7 @@ export function NoAccess({ email }: { email: string }) {
           <h1>Kein Zugang</h1>
         </div>
         <p>
-          Das Konto <b>{email}</b> ist angemeldet, aber nicht als Mitglied eingetragen. Der Admin kann es unter Einstellungen → Mitglieder freischalten.
+          Das Konto <b>{email}</b> ist angemeldet, aber nicht als Mitglied eingetragen. Der Admin kann es unter Mehr → Mitglieder freischalten.
         </p>
         <button className="btn ghost" onClick={() => void backend.signOut()}>
           Abmelden

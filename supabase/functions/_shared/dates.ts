@@ -107,6 +107,18 @@ export function fmtDayLong(k: string): string {
   return `${WD_LONG[d.getUTCDay()]}, ${d.getUTCDate()}. ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
+/** "Freitag, 1. März" */
+export function fmtDayMid(k: string): string {
+  const d = parseDay(k);
+  return `${WD_LONG[d.getUTCDay()]}, ${d.getUTCDate()}. ${MONTHS[d.getUTCMonth()]}`;
+}
+
+/** "1. März" */
+export function fmtDayMonth(k: string): string {
+  const d = parseDay(k);
+  return `${d.getUTCDate()}. ${MONTHS[d.getUTCMonth()]}`;
+}
+
 /** "März 2030" */
 export function fmtMonth(k: string): string {
   const d = parseDay(k);

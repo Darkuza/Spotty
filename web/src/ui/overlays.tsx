@@ -75,11 +75,12 @@ export function Sheet({ title, onClose, children, footer, headerExtra }: { title
     <>
       <div className="sheet-bg" onClick={onClose} />
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>
+        <div className="sheet-grab" aria-hidden="true" />
         <div className="inner sheet-head">
           <h2>{title}</h2>
           {headerExtra}
-          <button className="icon-btn" onClick={onClose} aria-label="Schließen">
-            <Icon name="close" />
+          <button className="ib" onClick={onClose} aria-label="Schließen">
+            <Icon name="close" size={18} stroke={2.1} />
           </button>
         </div>
         <div className="sheet-body">

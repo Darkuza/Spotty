@@ -1,22 +1,25 @@
-// Gerüst der App: Anmeldung, Kopfzeile mit Uhr und Notfall-Taste, fünf Reiter, Update-Hinweis.
+// Gerüst der App: Anmeldung, Seiten mit eigenem Kopf, fünf Reiter, Unterseiten über den Hash, Update-Hinweis.
 
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { SessionProvider, useMe, useSession } from "./lib/session";
 import { store, useStatus } from "./lib/store";
 import { useNow } from "./lib/hooks";
-import { useChecks, useEntries, usePhotos, usePlan, useRegimens } from "./lib/data";
-import { SheetHost, ToastHost, useSheets, useToast } from "./ui/overlays";
+import { useChecks, useEntries, usePhotos, usePlan } from "./lib/data";
+import { SheetHost, ToastHost, useToast } from "./ui/overlays";
 import { Icon } from "./ui/Icon";
-import { LoginView, NoAccess, Splash, Brand } from "./features/LoginView";
+import { PageHeader } from "./ui/Page";
+import { LoginView, NoAccess, Splash } from "./features/LoginView";
 import { TodayView } from "./features/today/TodayView";
+import { SimpleToday } from "./features/today/SimpleToday";
 import { LogView } from "./features/log/LogView";
+import { HeaderActions } from "./features/common";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { isFreshFor } from "./lib/fresh";
-import { SettingsSheet } from "./features/settings/SettingsSheet";
-import { EmergencySheet } from "./features/EmergencySheet";
-import { daysBetween, minutesOf } from "@shared/dates.ts";
-import { itemState, leadRegimen, stepFor, therapyStart } from "@shared/plan.ts";
-import type { Regimen } from "@shared/types.ts";
+import { minutesOf } from "@shared/dates.ts";
+import { itemState } from "@shared/plan.ts";
+import { lastMoveKind, navigate, openTab, savedScroll, titleOf, useRoute, type Tab } from "./lib/route";
+import { useViewMode } from "./lib/viewMode";
+import { dismissUpdate, runUpdate, useUpdate } from "./lib/update";
 
 // Seltener genutzte Bereiche erst bei Bedarf laden (der Hintergrunddienst hält sie offline vor).
 const StatsView = lazy(() => import("./features/stats/StatsView").then((m) => ({ default: m.StatsView })));
@@ -31,7 +34,6 @@ function ViewLoading() {
   );
 }
 
-type Tab = "heute" | "protokoll" | "verlauf" | "akte" | "claude";
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "heute", label: "Heute", icon: "today" },
   { id: "protokoll", label: "Protokoll", icon: "log" },
@@ -39,30 +41,6 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "akte", label: "Akte", icon: "records" },
   { id: "claude", label: "Claude", icon: "claude" },
 ];
-
-/** Gerät steht in einer anderen Zeitzone als Berlin: Uhr kennzeichnen. */
-const OTHER_TZ = (() => {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (!tz || tz === "Europe/Berlin") return false;
-    const probe = new Date();
-    const fmt = (zone: string) => new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(probe);
-    return fmt(tz) !== fmt("Europe/Berlin");
-  } catch {
-    return false;
-  }
-})();
-
-function tabFromHash(): Tab {
-  const h = location.hash.replace(/^#/, "");
-  return (TABS.find((t) => t.id === h)?.id || "heute") as Tab;
-}
-
-declare global {
-  interface Window {
-    __spottyUpdate?: (reload?: boolean) => Promise<void>;
-  }
-}
 
 export function App() {
   return (
@@ -88,16 +66,6 @@ function Gate() {
   }
   if (!me) return <NoAccess email={session.email} />;
   return <Shell />;
-}
-
-function subline(regs: Regimen[], day: string): string {
-  const start = therapyStart(regs);
-  if (!start) return "Pflege, Protokoll und Akte";
-  const n = daysBetween(start, day) + 1;
-  if (n < 1) return `Behandlung beginnt in ${1 - n} Tag${1 - n === 1 ? "" : "en"}`;
-  const lead = leadRegimen(regs);
-  const st = lead ? stepFor(lead, day) : null;
-  return lead && st ? `Tag ${n} · ${lead.name.split(" ")[0]}${st.dose ? ` ${st.dose}` : ""}` : `Tag ${n} der Behandlung`;
 }
 
 // Zeitpunkt, zu dem diese Person das Protokoll zuletzt angesehen hat (je Gerät).
@@ -139,15 +107,13 @@ function useOverdue(now: { day: string; minutes: number }): number {
 
 function Shell() {
   const now = useNow();
-  const status = useStatus();
-  const regs = useRegimens();
-  const sheets = useSheets();
+  const route = useRoute();
+  const mode = useViewMode();
+  const update = useUpdate();
   const toast = useToast();
-  const [tab, setTabState] = useState<Tab>(tabFromHash);
   const [day, setDay] = useState(now.day);
   const [prompt, setPrompt] = useState<string | null>(null);
-  const [visitedClaude, setVisitedClaude] = useState(tab === "claude");
-  const [update, setUpdate] = useState(false);
+  const [visitedClaude, setVisitedClaude] = useState(route.tab === "claude");
   const lastToday = useRef(now.day);
   const me = useMe();
   const entries = useEntries();
@@ -156,7 +122,7 @@ function Shell() {
   if (!seenRef.current) seenRef.current = loadSeen();
   const [seenAt, setSeenAt] = useState<number>(seenRef.current);
   const [viewSince, setViewSince] = useState<number>(seenRef.current);
-  const tabRef = useRef<Tab>(tab);
+  const tabRef = useRef<Tab | null>(route.tab);
   const markSeen = useCallback(() => {
     const n = Date.now();
     seenRef.current = n;
@@ -172,19 +138,23 @@ function Shell() {
     }
   }, [now.day]);
 
-  const setTab = useCallback(
-    (t: Tab) => {
-      const prev = tabRef.current;
-      tabRef.current = t;
-      if (t === "protokoll" && prev !== "protokoll") setViewSince(seenRef.current);
-      if (prev === "protokoll" && t !== "protokoll") markSeen();
-      setTabState(t);
-      if (t === "claude") setVisitedClaude(true);
-      if (location.hash !== `#${t}`) history.replaceState(null, "", `#${t}`);
-      window.scrollTo({ top: 0 });
-    },
-    [markSeen],
-  );
+  // Protokoll betreten: „neu seit“ festhalten; verlassen: als gesehen merken.
+  useEffect(() => {
+    const prev = tabRef.current;
+    const t = route.tab;
+    tabRef.current = t;
+    if (t === "protokoll" && prev !== "protokoll") setViewSince(seenRef.current);
+    if (prev === "protokoll" && t !== "protokoll") markSeen();
+    if (t === "claude") setVisitedClaude(true);
+  }, [route.tab, markSeen]);
+
+  // Beim Zurückgehen an die alte Stelle, sonst nach oben.
+  useLayoutEffect(() => {
+    const kind = lastMoveKind();
+    if (kind === "load") return;
+    const y = kind === "back" || kind === "forward" ? savedScroll(route.path) : undefined;
+    window.scrollTo({ top: y ?? 0 });
+  }, [route.path]);
 
   // Wer das Protokoll offen hat und die App verlässt, hat es gesehen.
   useEffect(() => {
@@ -197,124 +167,99 @@ function Shell() {
 
   const freshCount = useMemo(() => freshByOthers(entries, me?.user_id, seenAt).length + freshByOthers(photos, me?.user_id, seenAt).length, [entries, photos, me?.user_id, seenAt]);
 
-  useEffect(() => {
-    const onHash = () => setTab(tabFromHash());
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, [setTab]);
-
   useEffect(() => store.onError((msg) => toast.show(msg, { error: true, ms: 6000 })), [toast]);
 
-  useEffect(() => {
-    const on = () => setUpdate(true);
-    window.addEventListener("spotty-update", on);
-    if ((window as unknown as { __spottyNeedsUpdate?: boolean }).__spottyNeedsUpdate) setUpdate(true);
-    return () => window.removeEventListener("spotty-update", on);
+  const ask = useCallback((p: string) => {
+    setPrompt(p);
+    navigate("claude");
   }, []);
 
-  const runUpdate = update ? () => void window.__spottyUpdate?.(true) : null;
-  const ask = useCallback(
-    (p: string) => {
-      setPrompt(p);
-      setTab("claude");
-    },
-    [setTab],
-  );
-
   const overdue = useOverdue(now);
-  const sync = !status.online ? "offline" : status.pending ? "pending" : status.realtime === "SUBSCRIBED" ? "ok" : "";
-  const syncText = !status.online ? "Offline – Änderungen werden nachgereicht" : status.pending ? `${status.pending} Änderung(en) werden gesendet` : status.realtime === "SUBSCRIBED" ? "Live verbunden" : "Verbindet …";
+  const simple = mode === "einfach" && route.path === "heute";
+  const wide = route.tab === "verlauf" || route.tab === "akte";
 
   return (
     <>
-      <header className="app-header">
-        <div className="wrap">
-          <div className="brand">
-            <Brand />
-            <div className="brand-text">
-              <div className="brand-name">Spotty</div>
-              <div className="brand-sub">{subline(regs, now.day)}</div>
-            </div>
-          </div>
-          <div className="clock" title={syncText} aria-label={`${now.hm} Uhr${OTHER_TZ ? " in Berlin" : ""}, ${syncText}`}>
-            <span className={`sync-dot ${sync}`} />
-            <span className="clock-stack">
-              {now.hm}
-              {OTHER_TZ ? <span className="tz">Berlin</span> : null}
-            </span>
-          </div>
-          <button className="icon-btn danger" onClick={() => sheets.open((close) => <EmergencySheet onClose={close} />)} aria-label="Notfall">
-            <Icon name="phone" />
-          </button>
-          <button className="icon-btn" onClick={() => sheets.open((close) => <SettingsSheet onClose={close} onUpdate={runUpdate} />)} aria-label="Einstellungen">
-            <Icon name="settings" />
-          </button>
-        </div>
-      </header>
-
-      <main className={`app-main wrap${tab === "verlauf" || tab === "akte" ? " wide" : ""}`}>
-        {update ? (
-          <div className="banner info" style={{ marginBottom: 14 }}>
-            <div className="head">Neue Version verfügbar</div>
-            <div className="row">
-              <button className="btn small primary" onClick={() => void window.__spottyUpdate?.(true)}>
+      <main className={`app-main wrap${wide ? " wide" : ""}${simple ? " no-tabs" : ""}`}>
+        {update.available && !update.dismissed ? (
+          <div className="note col tone-blue" style={{ marginTop: 14 }}>
+            <div className="note-head">Neue Version verfügbar</div>
+            <div className="note-actions">
+              <button className="btn small primary" onClick={runUpdate}>
                 Jetzt aktualisieren
               </button>
-              <button className="btn small ghost" onClick={() => setUpdate(false)}>
+              <button className="btn small" onClick={dismissUpdate}>
                 Später
               </button>
             </div>
           </div>
         ) : null}
-        {!status.online ? (
-          <p className="hint" style={{ marginBottom: 10 }}>
-            Offline. Abhaken und Einträge funktionieren weiter und werden gesendet, sobald wieder Netz da ist.
-          </p>
-        ) : null}
-        <ErrorBoundary label={`Der Bereich „${TABS.find((t) => t.id === tab)?.label || tab}“`} resetKey={tab}>
+        <ErrorBoundary label={`Der Bereich „${titleOf(route.path)}“`} resetKey={route.path}>
           <Suspense fallback={<ViewLoading />}>
-            {tab === "heute" ? <TodayView day={day} now={now} onDay={setDay} onGoto={(t) => setTab(t as Tab)} /> : null}
-            {tab === "protokoll" ? <LogView day={day} now={now} onDay={setDay} newSince={viewSince} /> : null}
-            {tab === "verlauf" ? <StatsView now={now} onAsk={ask} /> : null}
-            {tab === "akte" ? <RecordsView now={now} onAsk={ask} /> : null}
+            {route.tab === "heute" ? simple ? <SimpleToday now={now} /> : <TodayView day={day} now={now} onDay={setDay} /> : null}
+            {route.tab === "protokoll" ? <LogView day={day} now={now} onDay={setDay} newSince={viewSince} /> : null}
+            {route.tab === "verlauf" ? (
+              <div className="page">
+                <PageHeader title="Verlauf" actions={<HeaderActions />} />
+                <div className="blk">
+                  <StatsView now={now} onAsk={ask} />
+                </div>
+              </div>
+            ) : null}
+            {route.tab === "akte" ? (
+              <div className="page">
+                <PageHeader title="Akte" actions={<HeaderActions />} />
+                <div className="blk">
+                  <RecordsView now={now} onAsk={ask} />
+                </div>
+              </div>
+            ) : null}
           </Suspense>
         </ErrorBoundary>
         {visitedClaude ? (
-          <div hidden={tab !== "claude"}>
+          <div hidden={route.tab !== "claude"}>
             <ErrorBoundary label="Der Bereich „Claude“">
               <Suspense fallback={<ViewLoading />}>
-                <AssistantView prompt={prompt} onPromptUsed={() => setPrompt(null)} />
+                <div className="page">
+                  <PageHeader title="Claude" actions={<HeaderActions />} />
+                  <div className="blk">
+                    <AssistantView prompt={prompt} onPromptUsed={() => setPrompt(null)} />
+                  </div>
+                </div>
               </Suspense>
             </ErrorBoundary>
           </div>
         ) : null}
       </main>
 
-      <nav className="tabbar" aria-label="Bereiche">
-        <div className="tabs" role="tablist">
-          {TABS.map((t) => {
-            const late = t.id === "heute" ? overdue : 0;
-            const fresh = t.id === "protokoll" && tab !== "protokoll" ? freshCount : 0;
-            const extra = [late ? `${late} überfällig` : "", fresh ? `${fresh} neu von anderen` : ""].filter(Boolean).join(", ");
-            return (
-              <button key={t.id} role="tab" aria-selected={tab === t.id} aria-label={extra ? `${t.label}, ${extra}` : undefined} className={`tab${t.id === "claude" ? " claude" : ""}`} onClick={() => setTab(t.id)}>
-                <Icon name={t.icon} size={24} />
-                {late > 0 ? (
-                  <span className="badge" aria-hidden="true">
-                    {late}
-                  </span>
-                ) : null}
-                {fresh > 0 ? (
-                  <span className="badge new" aria-hidden="true">
-                    {fresh > 99 ? "99+" : fresh}
-                  </span>
-                ) : null}
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+      {!simple ? (
+        <nav className="tabbar" aria-label="Bereiche">
+          <div className="tabs" role="tablist">
+            {TABS.map((t) => {
+              const late = t.id === "heute" ? overdue : 0;
+              const fresh = t.id === "protokoll" && route.tab !== "protokoll" ? freshCount : 0;
+              const extra = [late ? `${late} überfällig` : "", fresh ? `${fresh} neu von anderen` : ""].filter(Boolean).join(", ");
+              return (
+                <button key={t.id} role="tab" aria-selected={route.tab === t.id} aria-label={extra ? `${t.label}, ${extra}` : undefined} className="tab" onClick={() => openTab(t.id)}>
+                  <Icon name={t.icon} size={24} stroke={1.9} />
+                  {late > 0 ? (
+                    <span className="badge" aria-hidden="true">
+                      {late}
+                    </span>
+                  ) : null}
+                  {fresh > 0 ? (
+                    <span className="badge new" aria-hidden="true">
+                      {fresh > 99 ? "99+" : fresh}
+                    </span>
+                  ) : null}
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      ) : null}
     </>
   );
 }
+

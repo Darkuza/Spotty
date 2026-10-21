@@ -1,0 +1,220 @@
+/* Spotty – Farben, Schriften, Maße
+   Hell: kühles Grau-Grün als Grund, weiße Karten, Petrol als Akzent.
+   Dunkel: eigene Stufen derselben Töne, keine Umkehrung.
+   Jede Farbe ist hier zuerst für hell definiert und wird für dunkel nur neu belegt. */
+
+:root {
+  /* Flächen und Linien */
+  --bg: #f1f4f2;
+  --surface: #ffffff;
+  --surface-2: #f7f9f8;
+  --surface-3: #e9eeec;
+  --seg-bg: #e4eae7;
+  --line: #dce3e0;
+  --line-2: #e8edeb;
+  --line-strong: #cfd8d4;
+
+  /* Schrift */
+  --ink: #12201c;
+  --ink-2: #34433e;
+  --muted: #5c6a65;
+  --faint: #93a19c;
+
+  /* Akzent */
+  --accent: #0e7469;
+  --accent-hover: #0a5c53;
+  --accent-ink: #ffffff;
+  --accent-soft: #ddf0ea;
+  --accent-text: #0a5c53;
+  --accent-card: #f2f9f7;
+
+  /* Töne für Kategorien und Hinweise */
+  --blue: #2459a8;
+  --blue-soft: #e4ecf8;
+  --blue-text: #1d4a8c;
+  --blue-card: #f4f7fd;
+  --blue-line: #d4e0f3;
+  --blue-deep: #24364f;
+  --amber: #c46a12;
+  --amber-soft: #fcefdd;
+  --amber-text: #8a4a08;
+  --amber-line: #f0d3ae;
+  --amber-deep: #5e3a0b;
+  --violet: #5b3fa8;
+  --violet-soft: #ece7f8;
+  --brown: #6e5a47;
+  --brown-soft: #f1ebe4;
+  --brown-card: #f6f1eb;
+  --brown-line: #e6dacb;
+  --brown-deep: #2f2620;
+  --red: #b42318;
+  --red-soft: #fce8e5;
+  --red-text: #9a1f15;
+  --red-line: #f2c6bf;
+  --red-deep: #7a2a20;
+  --red-ink: #ffffff;
+  --claude: #9a4422;
+  --claude-soft: #f4eeea;
+  --claude-line: #e6c2b2;
+  --claude-text: #7a3a1e;
+  --claude-ink: #ffffff;
+  --chart-orange: #c8620b;
+
+  /* Namen aus der ersten Fassung, weiter in Gebrauch */
+  --ok: #19733a;
+  --ok-soft: #dcf1e2;
+  --warn: var(--amber-text);
+  --warn-soft: var(--amber-soft);
+  --danger: var(--red);
+  --danger-soft: var(--red-soft);
+  --danger-ink: var(--red-ink);
+  --info: var(--blue);
+  --info-soft: var(--blue-soft);
+  --k-med: var(--accent);
+  --k-inh: var(--violet);
+  --k-feed: var(--amber-text);
+  --k-mess: var(--blue);
+  --k-foto: var(--brown);
+  --s1: var(--blue);
+  --s2: var(--chart-orange);
+  --grid: #e3e9e7;
+  --band: rgba(92, 106, 101, 0.13);
+  --shade: rgba(8, 18, 15, 0.42);
+  --viewer-bg: #0a0f0e;
+  --viewer-ink: #eef2f1;
+  --shadow: 0 1px 2px rgba(18, 32, 28, 0.05), 0 8px 24px rgba(18, 32, 28, 0.06);
+  --shadow-sheet: 0 -10px 30px rgba(0, 0, 0, 0.16);
+
+  --font-ui: "IBM Plex Sans", "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-num: "IBM Plex Sans Condensed", "IBM Plex Sans", "Arial Narrow", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --radius: 18px;
+  --radius-s: 12px;
+  --tabbar-h: 62px;
+  --header-h: 60px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1412;
+    --surface: #151e1b;
+    --surface-2: #1a2420;
+    --surface-3: #232e2a;
+    --seg-bg: #1f2925;
+    --line: #29352f;
+    --line-2: #212b27;
+    --line-strong: #3a4842;
+    --ink: #e6eeeb;
+    --ink-2: #c4d0cc;
+    --muted: #94a49f;
+    --faint: #6c7c76;
+    --accent: #3cc4b0;
+    --accent-hover: #5fd4c2;
+    --accent-ink: #04241f;
+    --accent-soft: #11352f;
+    --accent-text: #6fd8c8;
+    --accent-card: #12241f;
+    --blue: #86aef0;
+    --blue-soft: #182a45;
+    --blue-text: #aac5f5;
+    --blue-card: #141f30;
+    --blue-line: #26395a;
+    --blue-deep: #c9d9f5;
+    --amber: #e39a4a;
+    --amber-soft: #33240f;
+    --amber-text: #f0b56a;
+    --amber-line: #5a3f17;
+    --amber-deep: #f0d2a8;
+    --violet: #b9a4f2;
+    --violet-soft: #2a2245;
+    --brown: #cdb7a0;
+    --brown-soft: #2c251f;
+    --brown-card: #211c17;
+    --brown-line: #3d3329;
+    --brown-deep: #eadccd;
+    --red: #f3786b;
+    --red-soft: #3b1916;
+    --red-text: #f6a097;
+    --red-line: #6a2a24;
+    --red-deep: #f5b8b0;
+    --red-ink: #2a0d0a;
+    --claude: #e78c68;
+    --claude-soft: #2f201a;
+    --claude-line: #5c3726;
+    --claude-text: #f0ac8f;
+    --claude-ink: #2b130a;
+    --chart-orange: #ea8a3e;
+    --ok: #55c483;
+    --ok-soft: #12321f;
+    --grid: #22302c;
+    --band: rgba(148, 164, 159, 0.15);
+    --shade: rgba(0, 0, 0, 0.6);
+    --viewer-bg: #050807;
+    --viewer-ink: #e6eeeb;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
+    --shadow-sheet: 0 -10px 30px rgba(0, 0, 0, 0.45);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d1412;
+  --surface: #151e1b;
+  --surface-2: #1a2420;
+  --surface-3: #232e2a;
+  --seg-bg: #1f2925;
+  --line: #29352f;
+  --line-2: #212b27;
+  --line-strong: #3a4842;
+  --ink: #e6eeeb;
+  --ink-2: #c4d0cc;
+  --muted: #94a49f;
+  --faint: #6c7c76;
+  --accent: #3cc4b0;
+  --accent-hover: #5fd4c2;
+  --accent-ink: #04241f;
+  --accent-soft: #11352f;
+  --accent-text: #6fd8c8;
+  --accent-card: #12241f;
+  --blue: #86aef0;
+  --blue-soft: #182a45;
+  --blue-text: #aac5f5;
+  --blue-card: #141f30;
+  --blue-line: #26395a;
+  --blue-deep: #c9d9f5;
+  --amber: #e39a4a;
+  --amber-soft: #33240f;
+  --amber-text: #f0b56a;
+  --amber-line: #5a3f17;
+  --amber-deep: #f0d2a8;
+  --violet: #b9a4f2;
+  --violet-soft: #2a2245;
+  --brown: #cdb7a0;
+  --brown-soft: #2c251f;
+  --brown-card: #211c17;
+  --brown-line: #3d3329;
+  --brown-deep: #eadccd;
+  --red: #f3786b;
+  --red-soft: #3b1916;
+  --red-text: #f6a097;
+  --red-line: #6a2a24;
+  --red-deep: #f5b8b0;
+  --red-ink: #2a0d0a;
+  --claude: #e78c68;
+  --claude-soft: #2f201a;
+  --claude-line: #5c3726;
+  --claude-text: #f0ac8f;
+  --claude-ink: #2b130a;
+  --chart-orange: #ea8a3e;
+  --ok: #55c483;
+  --ok-soft: #12321f;
+  --grid: #22302c;
+  --band: rgba(148, 164, 159, 0.15);
+  --shade: rgba(0, 0, 0, 0.6);
+  --viewer-bg: #050807;
+  --viewer-ink: #e6eeeb;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-sheet: 0 -10px 30px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}

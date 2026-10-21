@@ -11,7 +11,7 @@ import { ReportSheet } from "./ReportSheet";
 import { addDays, dayRange, fmtDM, fmtDayShort, minutesOf, type BerlinNow } from "@shared/dates.ts";
 import { LAGE_KURZ, fmtNum, num } from "@shared/entryTypes.ts";
 import { dayStats, fluidOfDay, foodOfDay, median } from "@shared/stats.ts";
-import { itemState, itemsForDay, therapyStart } from "@shared/plan.ts";
+import { itemGiven, itemState, itemsForDay, therapyStart } from "@shared/plan.ts";
 import type { DayNote } from "@shared/types.ts";
 import { copyText, downloadText } from "../../lib/files";
 import { csv, rangeText } from "../../lib/report";
@@ -92,7 +92,7 @@ export function StatsView({ now, onAsk }: { now: BerlinNow; onAsk: (prompt: stri
   for (const d of days) {
     const items = itemsForDay(regimens, d).filter((it) => it.kind === "check" && (d < now.day || minutesOf(it.time) <= now.minutes));
     planTotal += items.length;
-    planDone += items.filter((it) => itemState(it, d, checks, entries, photos).done).length;
+    planDone += items.filter((it) => itemGiven(itemState(it, d, checks, entries, photos))).length;
   }
 
   // Markierungen: Dosiswechsel bei Stufenplänen und Klinikbesuche

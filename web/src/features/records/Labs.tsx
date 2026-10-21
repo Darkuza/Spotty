@@ -181,7 +181,7 @@ export function LabsPanel({ labs, docs, initialDate }: { labs: Lab[]; docs: Doc[
                 const s = series.get(seriesKey(l)) || [];
                 const vals = s.filter((x) => x.value != null).map((x) => x.value as number);
                 return (
-                  <button key={l.id} className="lab" onClick={() => openLab(l)}>
+                  <button key={l.id} className="lab-row" onClick={() => openLab(l)}>
                     <span className="p">
                       {l.param}
                       <span>
@@ -304,7 +304,7 @@ function LabSheet({ lab, all, docs, onClose }: { lab: Lab; all: Lab[]; docs: Doc
       ) : null}
       <div className="card flush">
         {same.map((l) => (
-          <div key={l.id} className="lab" style={{ cursor: "default" }}>
+          <div key={l.id} className="lab-row" style={{ cursor: "default" }}>
             <span className="p">
               {fmtDMY(l.date)}
               <span>{[docTitle(l.document_id), l.device].filter(Boolean).join(" · ")}</span>
