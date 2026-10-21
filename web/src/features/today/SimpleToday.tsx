@@ -7,7 +7,7 @@ import { useNowValue } from "../../lib/now";
 import { useSheets, useToast } from "../../ui/overlays";
 import { Glyph } from "../../ui/Glyph";
 import { Icon } from "../../ui/Icon";
-import { Avatar, CircleButton, Group, NavBar, Row, Screen, SectionHead } from "../../ui/ios";
+import { Avatar, CircleButton, Group, NavBar, Pill, PromptCard, Row, Screen, SectionHead } from "../../ui/ios";
 import { EntrySheet } from "../entry/EntrySheet";
 import { EmergencySheet } from "../EmergencySheet";
 import { ProfileHub } from "../profile/ProfileHub";
@@ -20,6 +20,7 @@ import { BEFINDEN_OPTS, summarize } from "@shared/entryTypes.ts";
 import type { EntryType, PlanItem } from "@shared/types.ts";
 import { uploadProtocolPhoto } from "../../lib/photos";
 import { setViewMode } from "../../lib/viewMode";
+import { dismissUpdate, runUpdate, useUpdate } from "../../lib/update";
 
 const SNOOZE_MIN = 15;
 
@@ -54,6 +55,7 @@ export function SimpleToday() {
   const [snoozed, setSnoozed] = useState<Record<string, number>>({});
   const [openPart, setOpenPart] = useState<Part | "none" | null>(null);
   const name = profile?.data?.name || "Spotty";
+  const update = useUpdate();
 
   const states = useMemo(() => items.map((it) => itemState(it, day, checks, entries, photos)), [items, day, checks, entries, photos]);
   const pending = items.map((it, i) => ({ it, st: states[i] })).filter((x) => !x.st.done);
@@ -116,6 +118,14 @@ export function SimpleToday() {
         }
       />
       <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => void onFiles(e.target.files)} />
+
+      {update.available && !update.dismissed ? (
+        <div className="pcs">
+          <PromptCard label="APP" glyph="sparkle" color="var(--blue)" title="Neue Version verfügbar" text="Die neue Fassung lädt nach dem Aktualisieren; nichts geht verloren." onDismiss={dismissUpdate}>
+            <Pill onClick={runUpdate}>Jetzt aktualisieren</Pill>
+          </PromptCard>
+        </div>
+      ) : null}
 
       {hero ? <SimpleHero hero={hero} now={now} onAct={act} onLater={later} onSkip={skip} uploading={uploading} /> : <AllDone hasPlan={items.length > 0} />}
 

@@ -14,19 +14,24 @@ import { ProfileHub } from "../profile/ProfileHub";
 import { ReportSheet } from "../stats/ReportSheet";
 import { regimenStyle } from "../plan/planStyle";
 
-export const RECORD_AREAS: { id: string; label: string; glyph: string; words: string }[] = [
-  { id: "dokumente", label: "Klinische Dokumente", glyph: "doc", words: "befunde pdf berichte entlassung" },
-  { id: "labor", label: "Laborergebnisse", glyph: "flask", words: "blut werte blutbild" },
+/** Bereiche der Akte; Bezeichnungen mit weichem Trennstrich (\u00ad), damit lange Wörter sauber umbrechen. */
+export const RECORD_AREAS: { id: string; label: string; glyph: string; words: string; route?: string }[] = [
+  { id: "dokumente", label: "Klinische Dokumente", glyph: "doc", words: "befunde pdf berichte entlassung original unterlagen praxis klinik" },
+  { id: "protokolle", label: "Tages\u00adprotokolle", glyph: "notes", words: "protokoll papier fotos zettel tage einträge handschrift", route: "protokolle" },
+  { id: "labor", label: "Labor\u00adergebnisse", glyph: "flask", words: "blut werte blutbild" },
   { id: "diagnosen", label: "Erkrankungen", glyph: "bandage", words: "diagnosen problemliste probleme" },
-  { id: "unvertraeglichkeiten", label: "Unverträglichkeiten", glyph: "shield", words: "allergien allergie futter" },
+  { id: "unvertraeglichkeiten", label: "Unverträg\u00adlichkeiten", glyph: "shield", words: "allergien allergie futter" },
   { id: "fragen", label: "Fragen an die Klinik", glyph: "question", words: "telefonat termin" },
   { id: "chronik", label: "Chronik", glyph: "clock", words: "verlauf ereignisse geschichte" },
-  { id: "details", label: "Gesundheitsdetails", glyph: "person", words: "stammdaten rasse alter gewicht pflege geräte" },
+  { id: "details", label: "Gesundheits\u00addetails", glyph: "person", words: "stammdaten rasse alter gewicht pflege geräte" },
   { id: "kontakte", label: "Kontakte", glyph: "phone", words: "klinik telefon nummer notdienst tierarzt" },
 ];
 
+const areaRoute = (a: (typeof RECORD_AREAS)[number]) => a.route || `akte/${a.id}`;
+
 function norm(s: string): string {
   return s
+    .replace(/\u00ad/g, "")
     .toLowerCase()
     .replace(/ä/g, "ae")
     .replace(/ö/g, "oe")
@@ -72,7 +77,7 @@ function Categories() {
       <SectionHead title="Gesundheitseinträge" />
       <div className="ctiles">
         {RECORD_AREAS.map((a) => (
-          <CatTile key={a.id} glyph={a.glyph} color="var(--blue)" label={a.label} onClick={() => openSub(`akte/${a.id}`)} />
+          <CatTile key={a.id} glyph={a.glyph} color="var(--blue)" label={a.label} onClick={() => openSub(areaRoute(a))} />
         ))}
       </div>
       <CapsuleRow glyph="doc" color="var(--blue)" label="Bericht für die Klinik" onClick={() => sheets.open((close) => <ReportSheet now={now} onClose={close} />)} />
@@ -83,7 +88,7 @@ function Categories() {
 /** Seiten und Blätter der App, die die Suche ebenfalls findet. */
 const PAGES: { id: string; label: string; glyph: string; color: string; words: string; sub?: string }[] = [
   { id: "notfall", label: "Notfall", glyph: "phone", color: "var(--red)", words: "notfall klinik anrufen warnzeichen notdienst notfallpass kurzinfo" },
-  { id: "protokoll", label: "Tagesprotokoll", glyph: "notes", color: "var(--blue)", words: "protokoll einträge papier foto zettel notiz tag" },
+  { id: "protokoll", label: "Tagesprotokoll von heute", glyph: "notes", color: "var(--blue)", words: "protokoll einträge papier foto zettel notiz tag heute" },
   { id: "tabelle", label: "Tage im Überblick", glyph: "calendar", color: "var(--blue)", words: "tabelle verlauf csv export überblick kopieren" },
   { id: "alle-daten", label: "Alle Daten", glyph: "heart", color: "var(--red)", words: "alle daten messwerte" },
   { id: "trends", label: "Trends", glyph: "trend", color: "var(--blue)", words: "trend entwicklung vergleich" },
@@ -143,7 +148,7 @@ function SearchResults({ q }: { q: string }) {
       {areas.length ? (
         <Group header="Akte">
           {areas.map((a) => (
-            <Row key={a.id} glyph={a.glyph} color="var(--blue)" title={a.label} chevron onClick={() => openSub(`akte/${a.id}`)} />
+            <Row key={a.id} glyph={a.glyph} color="var(--blue)" title={a.label} chevron onClick={() => openSub(areaRoute(a))} />
           ))}
         </Group>
       ) : null}

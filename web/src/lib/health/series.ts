@@ -480,7 +480,11 @@ export function summaryOf(def: MetricDef, period: Period, cols: ColVal[], sample
       const use = done.length ? done : dayList;
       const avg = use.reduce((a, d) => a + d.total, 0) / use.length;
       const label = period.range === "6M" || period.range === "J" ? "TÄGLICHER DURCHSCHNITT" : "DURCHSCHNITT";
-      return { label, value: def.agg === "count" ? fmtMax(avg, 1) : fmt(avg, dec), unit: def.unit, when, sub: done.length ? undefined : "nur heute, bis jetzt" };
+      // Gemittelt wird über die Tage mit Eintrag; fehlen im Zeitraum Tage, steht das darunter.
+      const lastDone = period.to < today ? period.to : addDays(today, -1);
+      const calendar = lastDone >= period.from ? dayRange(period.from, lastDone).length : 0;
+      const sub = !done.length ? "nur heute, bis jetzt" : done.length < calendar ? `an ${done.length} ${done.length === 1 ? "Tag" : "Tagen"} mit Eintrag` : undefined;
+      return { label, value: def.agg === "count" ? fmtMax(avg, 1) : fmt(avg, dec), unit: def.unit, when, sub };
     }
     case "range": {
       const rest = samples.filter((s) => inPeriod(s.day) && !s.hollow).map((s) => s.v);

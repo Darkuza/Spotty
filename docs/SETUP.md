@@ -50,16 +50,16 @@ Sind alle Schritte grün, ist die App erreichbar. Schlägt ein Schritt fehl, ste
 
 ## 6. In der App
 
-1. Mit `ADMIN_EMAIL` und `ADMIN_PASSWORD` anmelden. Unter **Einstellungen → Konto** das Passwort ändern.
-2. **Einstellungen → Akte importieren**: die vorbereitete Datei `spotty-akte.json` wählen (siehe [DATENIMPORT.md](DATENIMPORT.md)). Danach stehen Stammdaten, Behandlungsplan, Befunde mit Originalen, Laborwerte, Chronik, Fragen und die bisherigen Protokolle in der App.
-3. **Einstellungen → Mitglieder → Mitglied anlegen**: Name, E-Mail und Startpasswort; die Zugangsdaten persönlich weitergeben.
-4. Den eigenen Namen bei Bedarf unter **Mitglieder** anpassen.
+1. Mit `ADMIN_EMAIL` und `ADMIN_PASSWORD` anmelden. Über **Profil (rundes Bild oben rechts) → Passwort ändern** ein eigenes Passwort setzen.
+2. **Profil → Akte importieren**: die vorbereitete Datei `spotty-akte.json` wählen (siehe [DATENIMPORT.md](DATENIMPORT.md)). Danach stehen Stammdaten, Behandlungsplan, Befunde mit Originalen, Laborwerte, Chronik, Fragen und die bisherigen Protokolle in der App.
+3. **Profil → Familie → Mitglied anlegen**: Name, E-Mail und Startpasswort; die Zugangsdaten persönlich weitergeben.
+4. Den eigenen Namen bei Bedarf unter **Profil → Familie** anpassen.
 
 ## 7. Auf dem iPhone
 
 1. Die Adresse in **Safari** öffnen, anmelden.
 2. Teilen → **Zum Home-Bildschirm**.
-3. Spotty vom Home-Bildschirm öffnen → **Einstellungen → Erinnerungen** einschalten und „Probe senden“ tippen.
+3. Spotty vom Home-Bildschirm öffnen → **Profil → Erinnerungen** einschalten und „Probe senden“ tippen.
 
 Erinnerungen kommen zur Planzeit (Prüfung alle fünf Minuten), auf Wunsch zusätzlich nach 30 Minuten, wenn ein Medikament noch nicht abgehakt ist. Jedes Gerät wählt selbst, welche Arten es bekommt.
 
@@ -68,5 +68,5 @@ Erinnerungen kommen zur Planzeit (Prüfung alle fünf Minuten), auf Wunsch zusä
 - **Updates:** Jeder Push auf `main` stellt neu bereit. Die App zeigt „Neue Version verfügbar“.
 - **Kosten:** Supabase Free genügt. Claude wird nach Verbrauch abgerechnet; das Limit aus 2.2 begrenzt die Kosten.
 - **Pausieren:** Supabase pausiert kostenlose Projekte nach einer Woche ohne Nutzung. Bei täglicher Nutzung passiert das nicht; ein pausiertes Projekt lässt sich im Dashboard mit einem Klick fortsetzen.
-- **Sicherung:** Einstellungen → Sicherung herunterladen speichert alle Einträge als JSON. Fotos und PDFs liegen in der Supabase-Dateiablage.
+- **Sicherung:** Profil → Sicherung herunterladen speichert alle Einträge als JSON. Fotos und PDFs liegen in der Supabase-Dateiablage.
 - **Selbstregistrierung:** Wird beim Bereitstellen abgeschaltet. Falls der Schritt eine Warnung zeigt: in Supabase unter Authentication → Sign In / Providers „Allow new users to sign up“ ausschalten.

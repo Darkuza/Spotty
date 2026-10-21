@@ -98,7 +98,7 @@ function MemberSheet({ member, self, onClose, onSaved }: { member: MemberRow | n
     try {
       if (!member) {
         await backend.invoke("admin-users", { action: "create", name: name.trim(), email: email.trim(), password, role });
-        setDone(`Konto angelegt. Bitte ${name.trim()} diese Zugangsdaten persönlich geben:\n\nAdresse: ${location.origin}${location.pathname}\nE-Mail: ${email.trim()}\nStartpasswort: ${password}\n\nDas Passwort lässt sich nach der Anmeldung unter Mehr ändern.`);
+        setDone(`Konto angelegt. Bitte ${name.trim()} diese Zugangsdaten persönlich geben:\n\nAdresse: ${location.origin}${location.pathname}\nE-Mail: ${email.trim()}\nStartpasswort: ${password}\n\nNach der Anmeldung lässt sich das Passwort über das Profilbild oben rechts unter „Passwort ändern“ neu setzen.`);
       } else {
         const body: Record<string, unknown> = { action: "update", user_id: member.user_id, name: name.trim(), role };
         if (password) body.password = password;

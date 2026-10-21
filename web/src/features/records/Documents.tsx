@@ -529,7 +529,7 @@ export function DocPage({ docId, back }: { docId: string; back: string }) {
       ) : null}
       <Group header={`Dateien · ${doc.files?.length || 0}`} footer={!doc.files?.length ? (doc.status === "original_fehlt" ? "Das Original liegt nicht vor. Inhalt stammt aus Gesprächen und Notizen." : "Keine Datei hinterlegt.") : undefined}>
         {doc.files?.map((f) => <FileRow key={f.path} file={f} onRemove={() => void removeFile(f)} />)}
-        <Row icon="plus" color="var(--blue)" title="Datei hinzufügen" tone="blue" onClick={() => !busy && addRef.current?.click()} />
+        <Row icon="plus" color="var(--blue)" title="Datei hinzufügen" tone="blue" disabled={!!busy} onClick={() => addRef.current?.click()} />
       </Group>
       <input ref={addRef} type="file" accept="application/pdf,image/*" multiple hidden onChange={(e) => {
         void addFiles(Array.from(e.target.files || []));
@@ -537,7 +537,7 @@ export function DocPage({ docId, back }: { docId: string; back: string }) {
       }} />
       <Group footer={busy || undefined}>
         <Row glyph="chat" color="var(--claude)" title="Mit Claude besprechen" onClick={() => ask(`Bitte erkläre mir das Dokument „${doc.title}“${doc.doc_date ? ` vom ${fmtDMY(doc.doc_date)}` : ""} in einfachen Worten: Was wurde untersucht, was ist auffällig, was bedeutet das für Spotty, und welche Fragen sollten wir dazu stellen?`)} />
-        <Row icon="refresh" color="var(--blue)" title={busy && busy.startsWith("Claude") ? "Claude liest …" : "Erneut auslesen"} tone="blue" onClick={() => (!busy && doc.files?.length ? void reread() : undefined)} />
+        <Row icon="refresh" color="var(--blue)" title={busy && busy.startsWith("Claude") ? "Claude liest …" : "Erneut auslesen"} sub={!doc.files?.length ? "Erst mit einer Datei möglich" : undefined} tone="blue" disabled={!!busy || !doc.files?.length} onClick={() => void reread()} />
         <Row title="Dokument löschen" tone="red" onClick={() => void remove()} />
       </Group>
     </Screen>

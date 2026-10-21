@@ -124,7 +124,7 @@ export const ARTICLES: Article[] = [
       {
         title: "Entdecken",
         items: [
-          "Alle Messwerte nach Kategorien, darunter die Akte: Dokumente, Laborergebnisse, Diagnosen, Unverträglichkeiten, Fragen an die Klinik und die Chronik.",
+          "Alle Messwerte nach Kategorien, darunter die Akte: Klinische Dokumente mit den Originalen, Tagesprotokolle mit den Papierfotos, Laborergebnisse, Erkrankungen, Unverträglichkeiten, Fragen an die Klinik und die Chronik.",
           "„Medikamente“ zeigt den Tagesplan mit allen Uhrzeiten, die Mittel mit Stufenplan und Vorrat und die Abstandsregeln.",
           "Jeder Messwert hat ein Diagramm für Tag, Woche, Monat, sechs Monate und Jahr. Einen Balken antippen zeigt den Wert; zur Seite wischen blättert zurück.",
         ],

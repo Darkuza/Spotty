@@ -54,7 +54,8 @@ export function saveEntry(e: Partial<Entry> & { type: EntryType; day: string; ti
     ...(existing || {}),
     ...e,
     id,
-    slot: e.slot ?? existing?.slot ?? null,
+    // null heißt bewusst ohne Planpunkt (etwa nach dem Verschieben auf einen anderen Tag); nur „nicht angegeben“ übernimmt den alten.
+    slot: e.slot !== undefined ? e.slot : (existing?.slot ?? null),
     ack: e.ack ?? existing?.ack ?? false,
     source: e.source || existing?.source || "app",
     created_by: existing?.created_by ?? store.userId ?? null,

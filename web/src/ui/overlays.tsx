@@ -81,6 +81,21 @@ export function useSheets(): SheetApi {
   return ctx;
 }
 
+/**
+ * Fokus beim Öffnen ins Fenster holen (sofern dort nicht schon ein Feld den Fokus hat)
+ * und beim Schließen an die auslösende Stelle zurückgeben.
+ */
+function useFocusReturn(ref: { current: HTMLElement | null }) {
+  useEffect(() => {
+    const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const el = ref.current;
+    if (el && !el.contains(document.activeElement)) el.focus({ preventScroll: true });
+    return () => {
+      if (prev && prev.isConnected) prev.focus({ preventScroll: true });
+    };
+  }, [ref]);
+}
+
 export function Sheet({
   title,
   onClose,
@@ -108,6 +123,8 @@ export function Sheet({
   tall?: boolean;
 }) {
   useEscape(onClose);
+  const box = useRef<HTMLDivElement>(null);
+  useFocusReturn(box);
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -118,7 +135,7 @@ export function Sheet({
   return createPortal(
     <>
       <div className="sheet-bg" onClick={onClose} />
-      <div className={`sheet${tall ? " tall" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+      <div ref={box} tabIndex={-1} className={`sheet${tall ? " tall" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="sheet-bar">
           <button type="button" className="cb" onClick={onClose} aria-label="Schließen" title="Schließen">
             <Icon name="close" size={19} stroke={2.4} />
@@ -151,17 +168,20 @@ export function Sheet({
 /** Rückfrage in der Mitte des Bildschirms, wie ein iOS-Hinweisfenster. */
 function AlertDialog({ title, text, confirm, danger, onAnswer }: { title: string; text?: string; confirm: string; danger?: boolean; onAnswer: (ok: boolean) => void }) {
   useEscape(() => onAnswer(false));
+  const box = useRef<HTMLDivElement>(null);
+  useFocusReturn(box);
+  // Bei Löschen und Ähnlichem liegt der Fokus auf „Abbrechen“, damit Eingabe nichts versehentlich löscht.
   return createPortal(
     <>
       <div className="alert-bg" onClick={() => onAnswer(false)} />
-      <div className="alert" role="alertdialog" aria-modal="true" aria-label={title}>
+      <div ref={box} tabIndex={-1} className="alert" role="alertdialog" aria-modal="true" aria-label={title}>
         <p className="alert-t">{title}</p>
         {text ? <p className="alert-x">{text}</p> : null}
         <div className="alert-b">
-          <button type="button" className="pill gray" onClick={() => onAnswer(false)}>
+          <button type="button" className="pill gray" onClick={() => onAnswer(false)} autoFocus={!!danger}>
             Abbrechen
           </button>
-          <button type="button" className={`pill ${danger ? "gray red" : "fill"}`} onClick={() => onAnswer(true)} autoFocus>
+          <button type="button" className={`pill ${danger ? "gray red" : "fill"}`} onClick={() => onAnswer(true)} autoFocus={!danger}>
             {confirm}
           </button>
         </div>

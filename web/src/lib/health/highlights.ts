@@ -5,7 +5,7 @@
 import { addDays, dayRange, weekday, type BerlinNow } from "@shared/dates.ts";
 import { metricOf, type MetricDef } from "./metrics";
 import { dayValueOf, dayValues, samplesOf, sumUntil, type DayVal, type Sample, type Sources } from "./series";
-import { fmt, fmtDayMonthShort } from "./format";
+import { fmt, fmtDayMonthShort, fmtMax } from "./format";
 
 export type HlChart =
   | { kind: "cum"; today: number[]; usual: number[]; nowIdx: number; step: number }
@@ -57,6 +57,8 @@ function todayVsUsual(id: "trinken" | "futter", ctx: Ctx): Highlight | null {
   const { def, samples } = s;
   const today = ctx.now.day;
   if (ctx.now.minutes < 9 * 60) return null;
+  // Ohne einen Eintrag von heute gibt es nichts zu vergleichen („0 g“ hieße nur: noch nicht eingetragen).
+  if (!samples.some((x) => x.day === today && !x.paper)) return null;
   // Vergleichstage: die letzten bis zu 7 abgeschlossenen Tage mit Einzeleinträgen (keine reinen Papiersummen)
   const prev: string[] = [];
   for (let i = 1; i <= 14 && prev.length < 7; i++) {
@@ -122,7 +124,7 @@ function gassiWeek(ctx: Ctx): Highlight | null {
   return {
     id: "gassi-woche",
     metric: "gassi",
-    text: `In den letzten 7 Tagen war Spotty im Durchschnitt ${fmt(w.avg)} Minuten pro Tag draußen.`,
+    text: w.withData < 7 ? `An den ${w.withData} Tagen mit Eintrag der letzten Woche war Spotty im Durchschnitt ${fmt(w.avg)} Minuten pro Tag draußen.` : `In den letzten 7 Tagen war Spotty im Durchschnitt ${fmt(w.avg)} Minuten pro Tag draußen.`,
     stats: [{ label: "Durchschnittliche Dauer", value: fmt(w.avg), unit: "min" }],
     chart: { kind: "bars", labels: w.days.map((d) => LETTER[weekday(d)]), values: w.values, avg: w.avg },
   };
@@ -239,13 +241,14 @@ export function trendOf(id: string, src: Sources, today: string): Trend | null |
   const min = TREND_MIN[id] ?? 0;
   if (Math.abs(diff) < min || (before !== 0 && Math.abs(diff / before) < 0.1)) return null;
   const dec = def.dec ?? 0;
+  const f = (v: number) => (def.agg === "count" ? fmtMax(v, 1) : fmt(v, dec));
   const what = def.id === "spo2" ? "niedrigster Tageswert" : def.agg === "sum" || def.agg === "count" ? "pro Tag" : "Tageswert";
   return {
     metric: id,
     dir: diff > 0 ? "up" : "down",
     recent,
     before,
-    text: `Ø ${fmt(recent, dec)} ${def.unit} ${what} in den letzten 7 Tagen, in den 7 Tagen davor ${fmt(before, dec)}.`,
+    text: `Ø ${f(recent)} ${def.unit} ${what} in den letzten 7 Tagen, in den 7 Tagen davor ${f(before)}.`,
   };
 }
 

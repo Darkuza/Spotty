@@ -158,6 +158,8 @@ export function Row({
   accessory,
   wrap,
   ariaLabel,
+  pressed,
+  disabled,
 }: {
   glyph?: string;
   icon?: string;
@@ -172,6 +174,9 @@ export function Row({
   accessory?: ReactNode;
   wrap?: boolean;
   ariaLabel?: string;
+  /** Auswahlzeile: gewählt oder nicht (für Bildschirmleser) */
+  pressed?: boolean;
+  disabled?: boolean;
 }) {
   const inner = (
     <>
@@ -199,7 +204,7 @@ export function Row({
   );
   if (onClick)
     return (
-      <button type="button" className="lrow" onClick={onClick} aria-label={ariaLabel}>
+      <button type="button" className="lrow" onClick={onClick} aria-label={ariaLabel} aria-pressed={pressed} disabled={disabled}>
         {inner}
       </button>
     );

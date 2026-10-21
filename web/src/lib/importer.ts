@@ -9,6 +9,7 @@ import { safeName } from "./files";
 import type { Check, Doc, DocFile, Entry, EntryType, Lab, Photo, ProfileData, Question, Regimen, TimelineEvent } from "@shared/types.ts";
 import { TYPES } from "@shared/entryTypes.ts";
 import { isValidDay, isValidHm } from "@shared/dates.ts";
+import { sameEntry } from "./entryMatch";
 
 interface BundleFile {
   name: string;
@@ -22,7 +23,12 @@ export interface Bundle {
   created?: string;
   profile?: ProfileData;
   regimens?: Regimen[];
-  documents?: (Omit<Doc, "files"> & { files?: BundleFile[] })[];
+  /**
+   * Dokumente. `previous_summary` (nur in Nachträgen): Text, den das Dokument bisher hatte. Stimmt die
+   * vorhandene Zusammenfassung genau damit überein (in der App also nicht geändert), übernimmt der Import
+   * Titel, Zusammenfassung und Einzelbefunde aus der Datei, auch ohne „überschreiben“.
+   */
+  documents?: (Omit<Doc, "files"> & { files?: BundleFile[]; previous_summary?: string })[];
   labs?: Omit<Lab, "id">[];
   events?: Omit<TimelineEvent, "id">[];
   questions?: Omit<Question, "id">[];
@@ -37,6 +43,10 @@ export interface ImportSummary {
   regimens: number;
   documents: number;
   files: number;
+  /** an vorhandene Dokumente angehängte Originaldateien */
+  attached: number;
+  /** vorhandene Dokumente, deren Text aus der Datei aktualisiert wurde */
+  docsUpdated: number;
   labs: number;
   events: number;
   questions: number;
@@ -111,7 +121,7 @@ async function upsertChunks(table: string, rows: Record<string, unknown>[], prog
  * overwrite = false: vorhandene Datensätze (gleiche Kennung) bleiben unverändert, nur Neues kommt hinzu.
  */
 export async function importBundle(b: Bundle, overwrite: boolean, progress: Progress): Promise<ImportSummary> {
-  const sum: ImportSummary = { profile: false, regimens: 0, documents: 0, files: 0, labs: 0, events: 0, questions: 0, entries: 0, checks: 0, photos: 0, skipped: 0, warnings: [] };
+  const sum: ImportSummary = { profile: false, regimens: 0, documents: 0, files: 0, attached: 0, docsUpdated: 0, labs: 0, events: 0, questions: 0, entries: 0, checks: 0, photos: 0, skipped: 0, warnings: [] };
   const has = (table: TableName, key: Record<string, unknown>) => !!store.find(table, key);
   const keep = <T,>(table: TableName, key: Record<string, unknown>, row: T): T | null => {
     if (!overwrite && has(table, key)) {
@@ -142,25 +152,51 @@ export async function importBundle(b: Bundle, overwrite: boolean, progress: Prog
   let fileTotal = 0;
   for (const d of docs) fileTotal += (d.files || []).filter((f) => f.data).length;
   let fileDone = 0;
+  const uploadDocFile = async (docId: string, f: BundleFile & { data: string }): Promise<DocFile> => {
+    const mime = mimeOf(f.name, f.mime);
+    const path = `${docId}/${safeName(f.name)}`;
+    progress(`Datei ${f.name}`, fileDone, fileTotal);
+    const blob = await blobOf(f.data, mime);
+    await backend.upload("documents", path, blob, mime);
+    fileDone++;
+    return { path, name: f.name, mime, bytes: blob.size };
+  };
   for (const d of docs) {
     if (!d.id || !d.title) {
       sum.warnings.push("Ein Dokument ohne Kennung oder Titel wurde übersprungen.");
       continue;
     }
-    if (!overwrite && has("documents", { id: d.id })) {
-      sum.skipped++;
+    const existing = store.find<Doc>("documents", { id: d.id });
+    if (!overwrite && existing) {
+      // Das Dokument bleibt, wie es ist. Fehlende Originaldateien kommen dazu; der Text nur, wenn er in
+      // der App unverändert ist (siehe previous_summary).
+      const have = new Set((existing.files || []).map((f) => f.name));
+      const add = (d.files || []).filter((f): f is BundleFile & { data: string } => !!f.data && !have.has(f.name));
+      fileDone += (d.files || []).filter((f) => f.data).length - add.length;
+      const newText = typeof d.previous_summary === "string" && (existing.summary || "") === d.previous_summary && (d.summary || "") !== d.previous_summary;
+      if (!add.length && !newText) {
+        sum.skipped++;
+        continue;
+      }
+      const files = [...(existing.files || [])];
+      for (const f of add) files.push(await uploadDocFile(d.id, f));
+      const row: Doc = { ...existing, files };
+      if (add.length) row.status = d.status === "original_fehlt" || d.status === "ausstehend" ? existing.status : "ok";
+      if (newText) {
+        row.title = d.title || existing.title;
+        row.summary = d.summary || null;
+        row.findings = Array.isArray(d.findings) ? d.findings : existing.findings;
+        if (d.issuer) row.issuer = d.issuer;
+        sum.docsUpdated++;
+      }
+      await backend.upsert("documents", row as unknown as Record<string, unknown>);
+      sum.attached += add.length;
       continue;
     }
     const files: DocFile[] = [];
     for (const f of d.files || []) {
       if (!f.data) continue;
-      const mime = mimeOf(f.name, f.mime);
-      const path = `${d.id}/${safeName(f.name)}`;
-      progress(`Datei ${f.name}`, fileDone, fileTotal);
-      const blob = await blobOf(f.data, mime);
-      await backend.upload("documents", path, blob, mime);
-      files.push({ path, name: f.name, mime, bytes: blob.size });
-      fileDone++;
+      files.push(await uploadDocFile(d.id, f as BundleFile & { data: string }));
       sum.files++;
     }
     const row: Doc = {
@@ -241,9 +277,12 @@ export async function importBundle(b: Bundle, overwrite: boolean, progress: Prog
   await upsertChunks("questions", questions as unknown as Record<string, unknown>[], progress, "Fragen");
   sum.questions = questions.length;
 
-  // Protokolleinträge (als gesehen markiert, damit alte Warnungen nicht erneut erscheinen)
+  // Protokolleinträge (als gesehen markiert, damit alte Warnungen nicht erneut erscheinen).
+  // Was es mit gleichem Tag, gleicher Uhrzeit, gleicher Art und gleichem Wert schon gibt
+  // (etwa von Hand in der App eingetragen), kommt nicht ein zweites Mal dazu.
   const entries: Entry[] = [];
   const seen = new Map<string, number>();
+  const existingEntries = overwrite ? [] : store.rows<Entry>("entries");
   for (const e of b.entries || []) {
     if (!isValidDay(e.day) || !isValidHm(e.time) || !(e.type in TYPES)) {
       sum.warnings.push(`Eintrag ${e.day} ${e.time} (${e.type}) übersprungen: ungültig.`);
@@ -254,6 +293,10 @@ export async function importBundle(b: Bundle, overwrite: boolean, progress: Prog
     seen.set(base, n);
     const id = await stableId(`entry|${base}|${n}`);
     const row: Entry = { id, day: e.day, time: e.time, type: e.type as EntryType, data: e.data || {}, slot: e.slot || null, ack: true, source: "import" };
+    if (!overwrite && !has("entries", { id }) && existingEntries.some((x) => sameEntry(x, row))) {
+      sum.skipped++;
+      continue;
+    }
     const k = keep("entries", { id }, row);
     if (k) entries.push(k);
   }

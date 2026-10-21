@@ -4,7 +4,7 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import { useChecks, useEntries, usePhotos, usePlan, useRegimens, uncheckItem } from "../../lib/data";
 import { useNameOf } from "../../lib/session";
-import { useNowValue } from "../../lib/now";
+import { useFollowToday, useNowValue } from "../../lib/now";
 import { openSub } from "../../lib/route";
 import { Sheet, useConfirm, useSheets } from "../../ui/overlays";
 import { Glyph } from "../../ui/Glyph";
@@ -42,6 +42,7 @@ export function stockText(r: Regimen): string | null {
 export function MedsPage({ back }: { back: string }) {
   const now = useNowValue();
   const [day, setDay] = useState(now.day);
+  useFollowToday(now.day, day, setDay);
   const items = usePlan(day);
   const checks = useChecks();
   const entries = useEntries();

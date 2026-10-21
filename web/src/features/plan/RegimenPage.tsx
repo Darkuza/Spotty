@@ -106,9 +106,11 @@ export function RegimenPage({ id, back }: { id: string; back: string }) {
           <SectionHead title="Letzte 14 Tage" />
           <Group>
             {history.map(({ day, its, cs }) => {
-              const given = cs.filter((c) => c && !c.skipped).length;
+              // fällig: Uhrzeit vorbei oder schon erledigt (auch vorzeitig), damit nie „2/1“ dasteht
+              const isDue = its.map((it, i) => day < now.day || it.time <= now.hm || !!cs[i]);
+              const given = cs.filter((c, i) => isDue[i] && c && !c.skipped).length;
               const skipped = cs.filter((c) => c && c.skipped).length;
-              const due = day < now.day ? its.length : its.filter((it) => it.time <= now.hm).length;
+              const due = isDue.filter(Boolean).length;
               return (
                 <Row
                   key={day}

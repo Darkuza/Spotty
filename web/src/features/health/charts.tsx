@@ -346,6 +346,11 @@ export function HighlightChart({ chart, now }: { chart: HlChart; now?: string })
     const y = (v: number) => top + ph - (v / max) * ph;
     const line = (vals: number[]) => vals.map((v, i) => `${x(i)},${y(v)}`).join(" ");
     const nx = x(chart.nowIdx);
+    // Uhrzeit-Beschriftungen: „jetzt“ in der Mitte darf die Ränder (00:00, 24:00) nicht überdecken.
+    const LW = 34;
+    const nowX = Math.min(Math.max(nx, 4 + LW / 2), W - 4 - LW / 2);
+    const showStart = !now || nowX - LW / 2 > 4 + LW + 6;
+    const showEnd = !now || nowX + LW / 2 < W - 4 - LW - 6;
     return (
       <span className="hchart" ref={box}>
         <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
@@ -360,17 +365,21 @@ export function HighlightChart({ chart, now }: { chart: HlChart; now?: string })
           {[0, 24].map((h) => (
             <line key={h} x1={x((h * 60) / chart.step)} x2={x((h * 60) / chart.step)} y1={top + ph + 3} y2={top + ph + 13} stroke="var(--label-3)" strokeWidth={1.6} />
           ))}
-          <text x={4} y={H - 4} className="hc-ax">
-            00:00
-          </text>
+          {showStart ? (
+            <text x={4} y={H - 4} className="hc-ax">
+              00:00
+            </text>
+          ) : null}
           {now ? (
-            <text x={Math.min(Math.max(nx, 40), W - 46)} y={H - 4} className="hc-ax" textAnchor="middle">
+            <text x={nowX} y={H - 4} className="hc-ax" textAnchor="middle">
               {now}
             </text>
           ) : null}
-          <text x={W - 4} y={H - 4} className="hc-ax" textAnchor="end">
-            24:00
-          </text>
+          {showEnd ? (
+            <text x={W - 4} y={H - 4} className="hc-ax" textAnchor="end">
+              24:00
+            </text>
+          ) : null}
         </svg>
       </span>
     );

@@ -1,11 +1,13 @@
 # Datenimport
 
-Die Akte wird nicht im Repository gespeichert. Sie entsteht außerhalb (Ordner `data-private/`, von Git ignoriert) und wird einmal in der App eingelesen: **Einstellungen → Akte importieren**.
+Die Akte wird nicht im Repository gespeichert. Sie entsteht außerhalb (Ordner `data-private/`, von Git ignoriert) und wird in der App eingelesen: **Profil (rundes Bild oben rechts) → Akte importieren**.
 
 ## Bundle-Datei bauen
 
 ```bash
 node tools/build-bundle.mjs            # schreibt data-private/spotty-akte.json
+node tools/build-bundle.mjs data-private/nachtrag.json --from data-private/teil.json
+                                       # Nachtrag nur aus einer Teilakte (ohne Stammdaten und Plan)
 ```
 
 Eingaben:
@@ -39,5 +41,8 @@ Das Skript bettet PDFs und Fotos base64-kodiert ein; Fotos werden auf 2400 px ve
 
 - Kennungen werden aus dem Inhalt berechnet. Ein zweiter Import derselben Datei legt nichts doppelt an.
 - Standard „nur Neues hinzufügen“: Vorhandene Datensätze (auch in der App geänderte, z. B. beantwortete Fragen oder angepasste Dosen) bleiben unverändert.
+- Ausnahme Originaldateien: Bringt die Datei zu einem vorhandenen Dokument Dateien mit, die dort noch fehlen, werden sie angehängt; „Original fehlt“ wird dann zu „liegt vor“. Text und Befunde des Dokuments bleiben unverändert.
+- Nachträge können bei einem Dokument zusätzlich `previous_summary` mitgeben, den bisherigen Text. Stimmt die Zusammenfassung in der App genau damit überein (wurde dort also nicht geändert), übernimmt der Import Titel, Zusammenfassung und Einzelbefunde aus der Datei, etwa nach dem Abgleich mit einem nachgereichten Original.
+- Ein Protokolleintrag, den es mit gleichem Tag, gleicher Uhrzeit, gleicher Art und gleichem Wert schon gibt (etwa von Hand in der App eingetragen), wird nicht ein zweites Mal angelegt.
 - „Vorhandenes überschreiben“ ersetzt sie durch den Stand der Datei.
 - Importierte Protokolleinträge gelten als gesehen; alte Warnhinweise erscheinen nicht erneut.

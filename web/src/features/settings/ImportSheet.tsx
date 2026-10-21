@@ -155,6 +155,8 @@ export function ImportSheet({ onClose }: { onClose: () => void }) {
               result.profile ? "Stammdaten" : "",
               result.regimens ? n(result.regimens, "Planpunkt", "Planpunkte") : "",
               result.documents ? `${n(result.documents, "Dokument", "Dokumente")} (${n(result.files, "Datei", "Dateien")})` : "",
+              result.attached ? `${n(result.attached, "Originaldatei", "Originaldateien")} an vorhandene Dokumente angehängt` : "",
+              result.docsUpdated ? `${n(result.docsUpdated, "Dokumenttext", "Dokumenttexte")} nach dem Original aktualisiert` : "",
               result.labs ? n(result.labs, "Laborwert", "Laborwerte") : "",
               result.events ? n(result.events, "Chronik-Eintrag", "Chronik-Einträge") : "",
               result.questions ? n(result.questions, "Frage", "Fragen") : "",

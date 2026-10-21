@@ -244,7 +244,7 @@ function TopCards() {
               {single.measure === "atem" ? "Atemzüge zählen" : "Eintragen"}
             </Pill>
             <Pill kind="plain" onClick={() => skip(single)}>
-              Auslassen
+              Ausgelassen
             </Pill>
           </>
         ) : single ? (
@@ -253,7 +253,7 @@ function TopCards() {
               {uploading ? "Wird hochgeladen …" : "Foto aufnehmen"}
             </Pill>
             <Pill kind="plain" onClick={() => skip(single)}>
-              Auslassen
+              Ausgelassen
             </Pill>
           </>
         ) : (
@@ -264,7 +264,7 @@ function TopCards() {
       </PromptCard>,
     );
   } else if (items.length && !pending.length && !dismissed.has(`done|${day}`)) {
-    cards.push(<PromptCard key="done" label="TAGESPLAN" glyph="checklist" color="var(--green)" title="Für heute ist alles erledigt" text={`${items.length} Punkte abgehakt, eingetragen oder bewusst ausgelassen.`} onDismiss={() => dismiss(`done|${day}`)} />);
+    cards.push(<PromptCard key="done" label="TAGESPLAN" glyph="checklist" color="var(--green)" title="Für heute ist alles erledigt" text={`${items.length === 1 ? "1 Punkt" : `${items.length} Punkte`} abgehakt, eingetragen oder bewusst ausgelassen.`} onDismiss={() => dismiss(`done|${day}`)} />);
   }
 
   if (freshE.length + freshP.length) {

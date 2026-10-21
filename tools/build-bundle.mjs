@@ -1,17 +1,22 @@
 // Baut aus der vorbereiteten Akte (data-private/akte.json) und dem Behandlungsplan (data-private/regimens.json)
 // eine Import-Datei mit eingebetteten Originaldateien. Die Datei bleibt außerhalb des Repositorys und wird
-// in der App unter Einstellungen → Akte importieren eingelesen.
+// in der App unter Profil → Akte importieren eingelesen.
 //
-// Aufruf: node tools/build-bundle.mjs [Ausgabedatei]
+// Aufruf: node tools/build-bundle.mjs [Ausgabedatei] [--from Teilakte.json]
+// Mit --from entsteht eine Nachtragsdatei nur aus der angegebenen Teilakte, ohne Stammdaten und Plan.
 // Fotos werden auf höchstens 2400 px verkleinert, wenn das Paket „sharp“ verfügbar ist.
 
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { basename } from "node:path";
+import { basename, resolve } from "node:path";
 
 const root = new URL("../", import.meta.url);
 const dir = new URL("data-private/", root);
-const out = process.argv[2] || new URL("spotty-akte.json", dir).pathname;
+const args = process.argv.slice(2);
+const fromAt = args.indexOf("--from");
+const from = fromAt >= 0 ? resolve(args[fromAt + 1]) : null;
+const rest = args.filter((_, i) => fromAt < 0 || (i !== fromAt && i !== fromAt + 1));
+const out = rest[0] || new URL("spotty-akte.json", dir).pathname;
 
 const require = createRequire(import.meta.url);
 let sharp = null;
@@ -24,11 +29,11 @@ for (const p of ["sharp", "/opt/npm-tools/node_modules/sharp"]) {
   }
 }
 
-const akte = JSON.parse(readFileSync(new URL("akte.json", dir), "utf8"));
+const akte = JSON.parse(readFileSync(from || new URL("akte.json", dir), "utf8"));
 const regimensPath = new URL("regimens.json", dir);
 const extraPath = new URL("profile-extra.json", dir);
-if (existsSync(regimensPath)) akte.regimens = JSON.parse(readFileSync(regimensPath, "utf8"));
-if (existsSync(extraPath)) akte.profile = { ...(akte.profile || {}), ...JSON.parse(readFileSync(extraPath, "utf8")) };
+if (!from && existsSync(regimensPath)) akte.regimens = JSON.parse(readFileSync(regimensPath, "utf8"));
+if (!from && existsSync(extraPath)) akte.profile = { ...(akte.profile || {}), ...JSON.parse(readFileSync(extraPath, "utf8")) };
 
 async function embed(path, mime) {
   if (!path || !existsSync(path)) {

@@ -18,7 +18,7 @@ import { isValidDay } from "@shared/dates.ts";
 import type { EntryType } from "@shared/types.ts";
 import { NIGHT_STATES, catColor, catOf, metricOf, unitFor, type MetricDef } from "../../lib/health/metrics";
 import { colValues, periodOf, scaleFor, summaryOf, type RangeKey } from "../../lib/health/series";
-import { highlightsOf, trendOf } from "../../lib/health/highlights";
+import { TREND_METRICS, highlightsOf, trendOf } from "../../lib/health/highlights";
 import { fmt, fmtDate, fmtDateWd, plural } from "../../lib/health/format";
 import { uploadProtocolPhoto } from "../../lib/photos";
 import { EntrySheet } from "../entry/EntrySheet";
@@ -178,7 +178,7 @@ export function MetricPage({ id, back }: { id: string; back: string }) {
 function TrendRow({ def }: { def: MetricDef }) {
   const src = useSources();
   const now = useNowValue();
-  const t = useMemo(() => trendOf(def.id, src, now.day), [def.id, src, now.day]);
+  const t = useMemo(() => (TREND_METRICS.includes(def.id) ? trendOf(def.id, src, now.day) : ("zu wenig" as const)), [def.id, src, now.day]);
   const text = t === "zu wenig" || t === null ? (t === null ? "Gleichbleibend" : "Nicht verfügbar") : t.dir === "up" ? "Steigend" : "Sinkend";
   return (
     <button type="button" className="trendrow" onClick={() => openSub("trends")}>
@@ -431,11 +431,22 @@ export function NightSheet({ day, onClose }: { day?: string; onClose: () => void
         <p className="entry-title">Nacht</p>
       </div>
       <Group>
-        <Row title="Datum" accessory={<input className="cap-input" type="date" value={d} max={now.day} onChange={(e) => setD(e.target.value)} aria-label="Datum" />} />
+        <Row title="Datum" accessory={<input
+              className="cap-input"
+              type="date"
+              value={d}
+              max={now.day}
+              onChange={(e) => {
+                const nd = e.target.value;
+                setD(nd);
+                setV(notes.find((n) => n.day === nd)?.nacht || null);
+              }}
+              aria-label="Datum"
+            />} />
       </Group>
       <Group header="Wie war die Nacht?" footer={`Die Nacht vor dem ${isValidDay(d) ? fmtDate(d) : "gewählten Tag"}.`}>
         {NIGHT_STATES.map((st) => (
-          <Row key={st.v} title={st.label} onClick={() => setV(v === st.v ? null : st.v)} accessory={v === st.v ? <span className="row-check" aria-label="gewählt"><Icon name="check" size={18} stroke={2.8} /></span> : null} />
+          <Row key={st.v} title={st.label} pressed={v === st.v} onClick={() => setV(v === st.v ? null : st.v)} accessory={v === st.v ? <span className="row-check" aria-label="gewählt"><Icon name="check" size={18} stroke={2.8} /></span> : null} />
         ))}
       </Group>
     </Sheet>

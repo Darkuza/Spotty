@@ -112,6 +112,18 @@ describe("Kopfzahl", () => {
     const sum = summaryOf(d, p, colValues(d, p, s, days), s, days, TODAY);
     expect(sum.label).toBe("DURCHSCHNITT");
     expect(sum.value).toBe("400");
+    // die Woche hat sechs abgeschlossene Tage, nur zwei davon mit Eintrag
+    expect(sum.sub).toBe("an 2 Tagen mit Eintrag");
+  });
+
+  it("ohne Lücken steht kein Hinweis unter dem Durchschnitt", () => {
+    const d = def("trinken");
+    const entries = [1, 2, 3, 4, 5, 6].map((i) => e(addDays(TODAY, -i), "10:00", "trinken", { ml: 100 * i }));
+    const s = samplesOf(d, src(entries));
+    const days = dayValues(d, s);
+    const p = periodOf("W", 0, TODAY);
+    const sum = summaryOf(d, p, colValues(d, p, s, days), s, days, TODAY);
+    expect(sum.value).toBe("350");
     expect(sum.sub).toBeUndefined();
   });
 
@@ -222,6 +234,14 @@ describe("Highlights", () => {
     expect(highlightsOf(src([...few, e(TODAY, "08:00", "trinken", { ml: 300 })]), { day: TODAY, minutes: 12 * 60, hm: "12:00", seconds: 0 }, "trinken")).toHaveLength(0);
   });
 
+  it("ohne Eintrag von heute gibt es keinen Vergleich (kein „weniger gefressen“ bei 0 g)", () => {
+    const food = prevDays.flatMap((d) => [e(d, "09:00", "futter", { g: 150 }), e(d, "19:00", "futter", { g: 200 })]);
+    expect(highlightsOf(src(food), { day: TODAY, minutes: 23 * 60 + 30, hm: "23:30", seconds: 0 }, "futter")).toHaveLength(0);
+    const hl = highlightsOf(src([...food, e(TODAY, "09:00", "futter", { g: 100 })]), { day: TODAY, minutes: 12 * 60, hm: "12:00", seconds: 0 }, "futter");
+    expect(hl).toHaveLength(1);
+    expect(hl[0].text).toContain("weniger gefressen");
+  });
+
   it("Gewicht: nur erster und letzter Tag beschriftet", () => {
     const entries = [e(addDays(TODAY, -10), "08:00", "gewicht", { kg: 17 }), e(TODAY, "08:00", "gewicht", { kg: 17.8 })];
     const hl = highlightsOf(src(entries), { day: TODAY, minutes: 12 * 60, hm: "12:00", seconds: 0 }, "gewicht");
@@ -234,6 +254,13 @@ describe("Highlights", () => {
 });
 
 describe("Trends", () => {
+  it("Kot: Mittelwerte mit einer Nachkommastelle", () => {
+    const before = [8, 9, 10, 11].map((i) => e(addDays(TODAY, -i), "08:00", "kot", { form: "fest" }));
+    const recent = [1, 2, 3, 4].flatMap((i) => [e(addDays(TODAY, -i), "08:00", "kot", { form: "fest" }), ...(i < 3 ? [e(addDays(TODAY, -i), "18:00", "kot", { form: "fest" })] : [])]);
+    const t = trendOf("kot", src([...before, ...recent]), TODAY);
+    expect(t && t !== "zu wenig" ? t.text : "").toContain("1,5");
+  });
+
   it("braucht vier Tage je Woche", () => {
     const entries = [1, 2, 3].map((i) => e(addDays(TODAY, -i), "07:00", "atem", { bpm: 30 }));
     expect(trendOf("atem", src(entries), TODAY)).toBe("zu wenig");

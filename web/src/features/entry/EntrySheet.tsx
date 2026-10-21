@@ -241,6 +241,7 @@ export function EntrySheet({ type, day, slot, entry, startCounter, preset, onClo
               <Row
                 key={ov}
                 title={optText(o)}
+                pressed={on}
                 onClick={() => set(f.k, on ? cur.filter((x) => x !== ov) : [...cur, ov])}
                 accessory={
                   on ? (
@@ -298,7 +299,7 @@ export function EntrySheet({ type, day, slot, entry, startCounter, preset, onClo
       {main?.presets ? (
         <div className="presets" role="group" aria-label="Schnellwahl">
           {main.presets.map(([n, label]) => (
-            <button key={n} type="button" className={`preset${num(vals[main.k]) === n ? " on" : ""}`} onClick={() => set(main.k, String(n))}>
+            <button key={n} type="button" className={`preset${num(vals[main.k]) === n ? " on" : ""}`} aria-pressed={num(vals[main.k]) === n} onClick={() => set(main.k, String(n))}>
               {label}
             </button>
           ))}

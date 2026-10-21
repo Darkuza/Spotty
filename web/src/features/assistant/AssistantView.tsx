@@ -40,6 +40,7 @@ export function AssistantView() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const [running, setRunning] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const sheets = useSheets();
@@ -73,6 +74,7 @@ export function AssistantView() {
       setAttach(null);
       const ctrl = new AbortController();
       abortRef.current = ctrl;
+      setRunning(true);
       saveMessage(thread, "user", image ? `${question}\n\n${PHOTO_MARK}` : question).catch(() => undefined);
       let answer = "";
       let latest = "";
@@ -93,6 +95,7 @@ export function AssistantView() {
         setLive((l) => (l.thread === thread ? { ...l, error: msg } : l));
       } finally {
         abortRef.current = null;
+        setRunning(false);
       }
       if (answer.trim()) {
         const msg: ChatMessage = { id: newId(), thread, role: "assistant", content: answer, created_at: new Date().toISOString() };
@@ -105,13 +108,14 @@ export function AssistantView() {
     [live.thread, live.messages, refresh],
   );
 
-  // Frage aus einem anderen Reiter (z. B. „Mit Claude besprechen“) als neues Gespräch stellen
+  // Frage aus einem anderen Reiter (z. B. „Mit Claude besprechen“) als neues Gespräch stellen;
+  // läuft gerade eine Antwort, wartet die Frage, bis sie fertig ist.
   useEffect(() => {
-    if (prompt && !abortRef.current) {
+    if (prompt && !running && !abortRef.current) {
       onPromptUsed();
       void send(prompt, true);
     }
-  }, [prompt]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [prompt, running]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
@@ -163,33 +167,37 @@ export function AssistantView() {
         {threads.length ? (
           <Group footer="Gespräche sind nur für dich sichtbar. Die anderen sehen ihre eigenen.">
             {threads.map((t) => (
-              <Row
-                key={t.id}
-                title={t.title}
-                sub={`${fmtDayShort(berlinOfIso(t.updated).day)} ${berlinOfIso(t.updated).hm} · ${t.messages.length} Nachrichten`}
-                onClick={() => {
-                  openThread(t);
-                  close();
-                }}
-                accessory={
-                  <button
-                    type="button"
-                    className="xb del"
-                    aria-label="Gespräch löschen"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if (await confirm({ title: "Gespräch löschen?", text: t.title, confirm: "Löschen", danger: true })) {
-                        await deleteThread(t).catch(() => undefined);
-                        if (live.thread === t.id) newChat();
-                        await refresh();
-                        close();
-                      }
-                    }}
-                  >
-                    <Icon name="trash" size={15} stroke={2.2} />
-                  </button>
-                }
-              />
+              // Öffnen und Löschen als zwei nebeneinanderliegende Tasten (keine Taste in der Taste)
+              <div key={t.id} className="lrow split">
+                <button
+                  type="button"
+                  className="split-main"
+                  onClick={() => {
+                    openThread(t);
+                    close();
+                  }}
+                >
+                  <span className="row-t multi">
+                    <span className="row-title">{t.title}</span>
+                    <span className="row-sub">{`${fmtDayShort(berlinOfIso(t.updated).day)} ${berlinOfIso(t.updated).hm} · ${t.messages.length} Nachrichten`}</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="xb del"
+                  aria-label={`Gespräch „${t.title}“ löschen`}
+                  onClick={async () => {
+                    if (await confirm({ title: "Gespräch löschen?", text: t.title, confirm: "Löschen", danger: true })) {
+                      await deleteThread(t).catch(() => undefined);
+                      if (live.thread === t.id) newChat();
+                      await refresh();
+                      close();
+                    }
+                  }}
+                >
+                  <Icon name="trash" size={15} stroke={2.2} />
+                </button>
+              </div>
             ))}
           </Group>
         ) : null}

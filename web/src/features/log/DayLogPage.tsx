@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ackEntry, saveDayNote, useChecks, useDayNotes, useEntries, usePhotos, useProfile, useRegimens } from "../../lib/data";
 import { useMe, useMembers, useNameOf } from "../../lib/session";
-import { useNowValue } from "../../lib/now";
+import { useFollowToday, useNowValue } from "../../lib/now";
 import { getSeen, markSeen } from "../../lib/seen";
 import { isFreshFor, type FreshRow } from "../../lib/fresh";
 import { clinicPhone, telHref } from "../../lib/profile";
@@ -32,6 +32,7 @@ import { quickStyle } from "../../lib/health/entryStyle";
 export function DayLogPage({ day: dayParam, back }: { day?: string; back: string }) {
   const now = useNowValue();
   const [day, setDay] = useState(dayParam && isValidDay(dayParam) ? dayParam : now.day);
+  useFollowToday(now.day, day, setDay);
   const entries = useEntries();
   const photos = usePhotos();
   const notes = useDayNotes();
@@ -47,7 +48,6 @@ export function DayLogPage({ day: dayParam, back }: { day?: string; back: string
   const alerts = useDayAlerts(entries, day);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(0);
-  const [extracting, setExtracting] = useState<string | null>(null);
   // „Neu“ seit dem letzten Besuch dieser Seite; beim Verlassen gilt alles als gesehen.
   const [since] = useState(() => getSeen());
   useEffect(() => {
@@ -115,15 +115,12 @@ export function DayLogPage({ day: dayParam, back }: { day?: string; back: string
   };
 
   const runExtract = async (p: Photo, closeViewer?: () => void) => {
-    setExtracting(p.id);
     try {
       const result = await extractProtocol(p);
       closeViewer?.();
       sheets.open((close) => <ExtractReview photo={p} result={result} onClose={close} />);
     } catch (e) {
       toast.show(e instanceof Error ? e.message : "Auslesen fehlgeschlagen.", { error: true });
-    } finally {
-      setExtracting(null);
     }
   };
 
@@ -133,7 +130,7 @@ export function DayLogPage({ day: dayParam, back }: { day?: string; back: string
         photo={p}
         by={nameOf(p.created_by)}
         onClose={close}
-        onExtract={() => void runExtract(p, close)}
+        onExtract={() => runExtract(p, close)}
         onDelete={async () => {
           const okDel = await confirm({ title: "Foto löschen?", text: "Das Foto wird für alle gelöscht. Bereits übernommene Einträge bleiben erhalten.", confirm: "Löschen", danger: true });
           if (okDel) {
@@ -142,7 +139,6 @@ export function DayLogPage({ day: dayParam, back }: { day?: string; back: string
             toast.show("Foto gelöscht");
           }
         }}
-        extractingId={extracting}
       />
     ));
 
@@ -286,7 +282,8 @@ export function DayLogPage({ day: dayParam, back }: { day?: string; back: string
   );
 }
 
-function PhotoViewerWrap(props: { photo: Photo; by: string; onClose: () => void; onExtract: () => void; onDelete: () => void; extractingId: string | null }) {
+/** Fotoansicht mit eigenem Ladezustand fürs Auslesen; nach einem Fehler ist „Auslesen“ wieder bereit. */
+function PhotoViewerWrap(props: { photo: Photo; by: string; onClose: () => void; onExtract: () => Promise<void>; onDelete: () => void }) {
   const [busy, setBusy] = useState(false);
   return (
     <PhotoViewer
@@ -294,17 +291,39 @@ function PhotoViewerWrap(props: { photo: Photo; by: string; onClose: () => void;
       by={props.by}
       onClose={props.onClose}
       onDelete={props.onDelete}
-      extracting={busy || props.extractingId === props.photo.id}
+      extracting={busy}
       onExtract={() => {
+        if (busy) return;
         setBusy(true);
-        props.onExtract();
+        void props.onExtract().finally(() => setBusy(false));
       }}
     />
   );
 }
 
+/**
+ * Eingabe, die Änderungen anderer Geräte übernimmt, solange hier nicht getippt wird,
+ * und beim Verlassen nur speichert, was hier geändert wurde.
+ */
+function useSyncedDraft(value: string) {
+  const [draft, setDraft] = useState(value);
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    if (!dirty) setDraft(value);
+  }, [value, dirty]);
+  return {
+    draft,
+    dirty,
+    edit: (v: string) => {
+      setDraft(v);
+      setDirty(true);
+    },
+    done: () => setDirty(false),
+  };
+}
+
 function PaperRow({ label, unit, value, onSave }: { label: string; unit: string; value: number | null; onSave: (v: number | null) => void }) {
-  const [v, setV] = useState(value != null ? String(value) : "");
+  const { draft: v, dirty, edit, done } = useSyncedDraft(value != null ? String(value) : "");
   return (
     <Row
       title={label}
@@ -314,10 +333,12 @@ function PaperRow({ label, unit, value, onSave }: { label: string; unit: string;
             type="text"
             inputMode="numeric"
             value={v}
-            onChange={(e) => setV(e.target.value.replace(/[^0-9]/g, ""))}
+            onChange={(e) => edit(e.target.value.replace(/[^0-9]/g, ""))}
             onBlur={() => {
+              if (!dirty) return;
               const n = v ? parseInt(v, 10) : null;
               if (n !== value) onSave(n);
+              done();
             }}
             placeholder="–"
             aria-label={`${label} in ${unit}`}
@@ -330,13 +351,24 @@ function PaperRow({ label, unit, value, onSave }: { label: string; unit: string;
 }
 
 function NoteCard({ value, onSave }: { value: string; onSave: (v: string) => void }) {
-  const [v, setV] = useState(value);
+  const { draft: v, dirty, edit, done } = useSyncedDraft(value);
   return (
     <div className="card note-card">
       <label htmlFor="day-note" className="sr-only">
         Notiz zum Tag
       </label>
-      <textarea id="day-note" rows={3} value={v} onChange={(e) => setV(e.target.value)} onBlur={() => v !== value && onSave(v.trim())} placeholder="Notiz zum Tag: Was war heute besonders?" />
+      <textarea
+        id="day-note"
+        rows={3}
+        value={v}
+        onChange={(e) => edit(e.target.value)}
+        onBlur={() => {
+          if (!dirty) return;
+          if (v.trim() !== value) onSave(v.trim());
+          done();
+        }}
+        placeholder="Notiz zum Tag: Was war heute besonders?"
+      />
       <Icon name="edit" size={16} />
     </div>
   );

@@ -32,6 +32,7 @@ const RecordPage = lazy(() => import("./features/records/RecordPages").then((m) 
 const MedsPage = lazy(() => import("./features/plan/MedsPage").then((m) => ({ default: m.MedsPage })));
 const RegimenPage = lazy(() => import("./features/plan/RegimenPage").then((m) => ({ default: m.RegimenPage })));
 const DayLogPage = lazy(() => import("./features/log/DayLogPage").then((m) => ({ default: m.DayLogPage })));
+const ProtocolsPage = lazy(() => import("./features/log/ProtocolsPage").then((m) => ({ default: m.ProtocolsPage })));
 
 function ViewLoading() {
   return (
@@ -73,7 +74,10 @@ function Gate() {
     <NowProvider>
       <SourcesProvider>
         <AskProvider>
-          <Shell />
+          {/* Blätter der App innerhalb der Provider, damit sie dieselbe Uhrzeit und dieselben Daten sehen */}
+          <SheetHost>
+            <Shell />
+          </SheetHost>
         </AskProvider>
       </SourcesProvider>
     </NowProvider>
@@ -125,6 +129,8 @@ function renderPage(route: Route, simple: boolean): ReactNode {
       return <TablePage back={t} />;
     case "protokoll":
       return <DayLogPage day={b} back={t} />;
+    case "protokolle":
+      return b ? <DayLogPage day={b} back={`${t}/protokolle`} /> : <ProtocolsPage back={t} />;
     case "medikamente":
       return b ? <RegimenPage id={b} back={`${t}/medikamente`} /> : <MedsPage back={t} />;
     case "akte":
