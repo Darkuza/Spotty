@@ -19,6 +19,8 @@ export function ImportSheet({ onClose }: { onClose: () => void }) {
   const [result, setResult] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [dragging, setDragging] = useState(false);
+
   const pick = async (f: File | undefined) => {
     if (!f) return;
     setError(null);
@@ -30,6 +32,9 @@ export function ImportSheet({ onClose }: { onClose: () => void }) {
     } catch (e) {
       setBundle(null);
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      // Dieselbe Datei soll sich erneut wählen lassen.
+      if (inputRef.current) inputRef.current.value = "";
     }
   };
 
@@ -69,13 +74,29 @@ export function ImportSheet({ onClose }: { onClose: () => void }) {
         )
       }
     >
-      <input ref={inputRef} type="file" accept="application/json,.json" hidden onChange={(e) => void pick(e.target.files?.[0])} />
+      {/* Ohne Typfilter: iOS blendet .json-Dateien sonst teils aus. Geprüft wird der Inhalt nach der Auswahl. */}
+      <input ref={inputRef} type="file" hidden onChange={(e) => void pick(e.target.files?.[0])} />
       {!result ? (
         <>
           <p className="small">Die Akte-Datei (spotty-akte….json) enthält Stammdaten, Behandlungsplan, Befunde mit Originaldateien, Laborwerte, Chronik, Fragen und die bisherigen Protokolle. Sie wird einmal eingelesen und danach in der App gepflegt.</p>
-          <button className="btn ghost block" onClick={() => inputRef.current?.click()} disabled={!!progress}>
-            <Icon name="file" size={20} /> {bundle ? "Andere Datei wählen" : "Datei wählen"}
-          </button>
+          <div
+            className={`drop-zone${dragging ? " over" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              if (!progress) void pick(e.dataTransfer.files?.[0]);
+            }}
+          >
+            <button className="btn ghost block" onClick={() => inputRef.current?.click()} disabled={!!progress}>
+              <Icon name="file" size={20} /> {bundle ? "Andere Datei wählen" : "Datei wählen"}
+            </button>
+            <p className="hint">Am Computer lässt sich die Datei auch hierher ziehen. Am iPhone: „Datei auswählen“ und dann den Ordner in iCloud Drive öffnen.</p>
+          </div>
         </>
       ) : null}
       {error ? (
