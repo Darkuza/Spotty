@@ -1,6 +1,7 @@
 // Ein Mittel des Plans: heutige Dosis, Uhrzeiten, Stufenplan, Vorrat, Verlauf der letzten 14 Tage, Hinweise.
+// Die Abschnitte stehen auch auf der Wirkstoffseite (Medikamente) und sind deshalb als eigener Baustein herausgelöst.
 
-import { useMemo, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { useChecks, useRegimens } from "../../lib/data";
 import { useNowValue } from "../../lib/now";
 import { useAsk } from "../../lib/ask";
@@ -14,27 +15,17 @@ import { gapRules, fmtDuration } from "../../lib/gaps";
 import { fmtDate, fmtDayMonthShort } from "../../lib/health/format";
 import { CAT_LABEL } from "../../ui/kinds";
 import { RegimenSheet } from "../settings/PlanEditor";
+import type { Regimen } from "@shared/types.ts";
 import { regimenStyle } from "./planStyle";
 import { stockText } from "./MedsPage";
 
+const HISTORY_COMPACT = 7;
+
 export function RegimenPage({ id, back }: { id: string; back: string }) {
   const regimens = useRegimens();
-  const checks = useChecks();
-  const now = useNowValue();
   const sheets = useSheets();
   const ask = useAsk();
   const r = regimens.find((x) => x.id === id);
-  const history = useMemo(() => {
-    if (!r) return [];
-    return dayRange(addDays(now.day, -13), now.day)
-      .reverse()
-      .map((d) => {
-        const its = itemsForDay([r], d);
-        const cs = its.map((it) => checks.find((c) => c.day === d && c.slot === it.slot) || null);
-        return { day: d, its, cs };
-      })
-      .filter((x) => x.its.length);
-  }, [r, checks, now.day]);
   if (!r) {
     return (
       <Screen>
@@ -44,13 +35,6 @@ export function RegimenPage({ id, back }: { id: string; back: string }) {
     );
   }
   const st = regimenStyle(r);
-  const cur = stepFor(r, now.day);
-  const ph = phases(r, now.day);
-  const rules = gapRules(regimens).filter((g) => g.regimenId === r.id || g.others.includes(r.id));
-  const stock = stockText(r);
-  const pattern = (s: (typeof r.steps)[number]) => (s.pattern === "alternate" ? "jeden zweiten Tag" : s.pattern === "weekdays" ? (s.weekdays || []).map((w) => WD_SHORT[w]).join(", ") : "täglich");
-  // Hinweis zur Dosis, z. B. „¾ Tablette“; steht dort nur der Rhythmus, wird er nicht doppelt gezeigt
-  const hint = (s: (typeof r.steps)[number]) => (s.label && !s.label.startsWith(pattern(s)) ? s.label : "");
   return (
     <Screen>
       <NavBar title={r.name} back={back} trailing={<CircleButton icon="edit" label="Bearbeiten" onClick={() => sheets.open((close) => <RegimenSheet regimen={r} onClose={close} />)} />} />
@@ -62,11 +46,50 @@ export function RegimenPage({ id, back }: { id: string; back: string }) {
         <p className="reg-sub">{[CAT_LABEL[r.category], r.purpose].filter(Boolean).join(" · ")}</p>
       </div>
 
-      <Group header="Heute">
-        <Row title="Dosis" sub={cur ? hint(cur) || undefined : undefined} value={cur ? cur.dose || "laut Plan" : r.active ? "heute nicht geplant" : "pausiert"} />
-        <Row title="Uhrzeiten" value={(r.slots || []).map((s) => s.time).join(", ") || "–"} />
-        {cur ? <Row title="Rhythmus" value={(cur.label || "").startsWith(pattern(cur)) ? cur.label : pattern(cur)} wrap /> : null}
-        {stock ? <Row title="Vorrat" value={stock} /> : r.stock != null ? <Row title="Vorrat" value={`${fmtAmount(Number(r.stock))} ${r.unit || ""}`.trim()} /> : null}
+      <RegimenSections r={r} />
+
+      <Group>
+        <Row glyph="chat" color="var(--claude)" title="Mit Claude besprechen" onClick={() => ask(`Bitte erkläre mir ${r.name}${r.purpose ? ` (${r.purpose})` : ""} im Plan von Spotty: wozu, worauf achten, was bei vergessenen oder erbrochenen Gaben zu tun ist. Dosierungen ändert nur die Klinik.`)} />
+      </Group>
+    </Screen>
+  );
+}
+
+/**
+ * Abschnitte eines Plans: Heute, Hinweise, Stufenplan, Abstandsregeln, letzte 14 Tage.
+ * `compact` lässt Dosis, Uhrzeiten und Rhythmus weg (die Wirkstoffseite zeigt sie größer) und nennt den ersten Block „Plan“.
+ */
+export function RegimenSections({ r, compact = false }: { r: Regimen; compact?: boolean }) {
+  const regimens = useRegimens();
+  const checks = useChecks();
+  const now = useNowValue();
+  const [allDays, setAllDays] = useState(false);
+  const history = useMemo(() => {
+    return dayRange(addDays(now.day, -13), now.day)
+      .reverse()
+      .map((d) => {
+        const its = itemsForDay([r], d);
+        const cs = its.map((it) => checks.find((c) => c.day === d && c.slot === it.slot) || null);
+        return { day: d, its, cs };
+      })
+      .filter((x) => x.its.length);
+  }, [r, checks, now.day]);
+  const cur = stepFor(r, now.day);
+  const ph = phases(r, now.day);
+  const rules = gapRules(regimens).filter((g) => g.regimenId === r.id || g.others.includes(r.id));
+  const stock = stockText(r);
+  // Auf der Wirkstoffseite zeigt der Verlauf zunächst die letzten sieben Tage.
+  const shownDays = compact && !allDays ? history.slice(0, HISTORY_COMPACT) : history;
+  const pattern = (s: (typeof r.steps)[number]) => (s.pattern === "alternate" ? "jeden zweiten Tag" : s.pattern === "weekdays" ? (s.weekdays || []).map((w) => WD_SHORT[w]).join(", ") : "täglich");
+  // Hinweis zur Dosis, z. B. „¾ Tablette“; steht dort nur der Rhythmus, wird er nicht doppelt gezeigt
+  const hint = (s: (typeof r.steps)[number]) => (s.label && !s.label.startsWith(pattern(s)) ? s.label : "");
+  return (
+    <>
+      <Group header={compact ? "Plan" : "Heute"}>
+        {compact ? null : <Row title="Dosis" sub={cur ? hint(cur) || undefined : undefined} value={cur ? cur.dose || "laut Plan" : r.active ? "heute nicht geplant" : "pausiert"} />}
+        {compact ? null : <Row title="Uhrzeiten" value={(r.slots || []).map((s) => s.time).join(", ") || "–"} />}
+        {compact || !cur ? null : <Row title="Rhythmus" value={(cur.label || "").startsWith(pattern(cur)) ? cur.label : pattern(cur)} wrap />}
+        {stock ? <Row title="Vorrat" value={stock.replace(/^Vorrat /, "")} /> : r.stock != null ? <Row title="Vorrat" value={`${fmtAmount(Number(r.stock))} ${r.unit || ""}`.trim()} /> : null}
         <Row title="Erinnerung" value={r.notify === false ? "aus" : "an"} />
       </Group>
 
@@ -103,9 +126,9 @@ export function RegimenPage({ id, back }: { id: string; back: string }) {
 
       {history.length && r.category !== "mess" && r.category !== "foto" ? (
         <section aria-label="Verlauf">
-          <SectionHead title="Letzte 14 Tage" />
-          <Group>
-            {history.map(({ day, its, cs }) => {
+          {compact ? null : <SectionHead title="Letzte 14 Tage" />}
+          <Group header={compact ? "Letzte 14 Tage" : undefined}>
+            {shownDays.map(({ day, its, cs }) => {
               // fällig: Uhrzeit vorbei oder schon erledigt (auch vorzeitig), damit nie „2/1“ dasteht
               const isDue = its.map((it, i) => day < now.day || it.time <= now.hm || !!cs[i]);
               const given = cs.filter((c, i) => isDue[i] && c && !c.skipped).length;
@@ -121,13 +144,10 @@ export function RegimenPage({ id, back }: { id: string; back: string }) {
                 />
               );
             })}
+            {compact && history.length > HISTORY_COMPACT ? <Row title={allDays ? "Weniger anzeigen" : `Alle ${history.length} Tage anzeigen`} tone="blue" onClick={() => setAllDays(!allDays)} /> : null}
           </Group>
         </section>
       ) : null}
-
-      <Group>
-        <Row glyph="chat" color="var(--claude)" title="Mit Claude besprechen" onClick={() => ask(`Bitte erkläre mir ${r.name}${r.purpose ? ` (${r.purpose})` : ""} im Plan von Spotty: wozu, worauf achten, was bei vergessenen oder erbrochenen Gaben zu tun ist. Dosierungen ändert nur die Klinik.`)} />
-      </Group>
-    </Screen>
+    </>
   );
 }

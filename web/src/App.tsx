@@ -30,7 +30,8 @@ import { useViewMode } from "./lib/viewMode";
 const AssistantView = lazy(() => import("./features/assistant/AssistantView").then((m) => ({ default: m.AssistantView })));
 const RecordPage = lazy(() => import("./features/records/RecordPages").then((m) => ({ default: m.RecordPage })));
 const MedsPage = lazy(() => import("./features/plan/MedsPage").then((m) => ({ default: m.MedsPage })));
-const RegimenPage = lazy(() => import("./features/plan/RegimenPage").then((m) => ({ default: m.RegimenPage })));
+const MedicationList = lazy(() => import("./features/medications/MedicationList").then((m) => ({ default: m.MedicationList })));
+const MedicationRoute = lazy(() => import("./features/medications/MedicationPage").then((m) => ({ default: m.MedicationRoute })));
 const DayLogPage = lazy(() => import("./features/log/DayLogPage").then((m) => ({ default: m.DayLogPage })));
 const ProtocolsPage = lazy(() => import("./features/log/ProtocolsPage").then((m) => ({ default: m.ProtocolsPage })));
 
@@ -132,7 +133,9 @@ function renderPage(route: Route, simple: boolean): ReactNode {
     case "protokolle":
       return b ? <DayLogPage day={b} back={`${t}/protokolle`} /> : <ProtocolsPage back={t} />;
     case "medikamente":
-      return b ? <RegimenPage id={b} back={`${t}/medikamente`} /> : <MedsPage back={t} />;
+      return b ? <MedicationRoute k={b} back={`${t}/medikamente`} /> : <MedicationList back={t} />;
+    case "tagesplan":
+      return <MedsPage back={t} />;
     case "akte":
       return <RecordPage sub={route.sub.slice(1)} back={t} />;
     case "artikel":
