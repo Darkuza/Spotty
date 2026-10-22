@@ -13,6 +13,8 @@ import { EmergencySheet } from "../EmergencySheet";
 import { ProfileHub } from "../profile/ProfileHub";
 import { ReportSheet } from "../stats/ReportSheet";
 import { regimenStyle } from "../plan/planStyle";
+import { glyphOf, isMedRegimen, rowSub } from "../../lib/medications";
+import { useMedications } from "../medications/useMedications";
 
 /** Bereiche der Akte; Bezeichnungen mit weichem Trennstrich (\u00ad), damit lange Wörter sauber umbrechen. */
 export const RECORD_AREAS: { id: string; label: string; glyph: string; words: string; route?: string }[] = [
@@ -99,6 +101,7 @@ const PAGES: { id: string; label: string; glyph: string; color: string; words: s
 
 function SearchResults({ q }: { q: string }) {
   const regimens = useRegimens();
+  const meds = useMedications();
   const docs = useDocs();
   const sheets = useSheets();
   const now = useNowValue();
@@ -112,11 +115,12 @@ function SearchResults({ q }: { q: string }) {
   };
   const metrics = useMemo(() => METRICS.filter((m) => hit(m.label, m.tag, CATS.find((c) => c.id === m.cat)?.label)), [n]); // eslint-disable-line react-hooks/exhaustive-deps
   const cats = CATS.filter((c) => hit(c.label));
-  const regs = regimens.filter((r) => hit(r.name, r.purpose, r.instructions));
+  const regs = regimens.filter((r) => !isMedRegimen(r) && hit(r.name, r.purpose, r.instructions));
+  const medHits = meds.filter((it) => hit(it.name, it.substance?.name, it.substance?.group, it.substance?.line, ...(it.substance?.aliases || []), ...(it.substance?.similar || []), ...(it.substance?.brands || []), ...it.regimens.flatMap((r) => [r.name, r.purpose, r.instructions])));
   const ds = docs.filter((d) => hit(d.title, d.issuer, d.summary)).slice(0, 12);
   const areas = RECORD_AREAS.filter((a) => hit(a.label, a.words));
   const arts = ARTICLES.filter((a) => hit(a.title, a.teaser));
-  const none = !pages.length && !metrics.length && !cats.length && !regs.length && !ds.length && !areas.length && !arts.length;
+  const none = !pages.length && !metrics.length && !cats.length && !regs.length && !medHits.length && !ds.length && !areas.length && !arts.length;
   if (none) return <p className="search-none">Keine Treffer für „{q.trim()}“.</p>;
   return (
     <>
@@ -133,12 +137,15 @@ function SearchResults({ q }: { q: string }) {
             <Row key={c.id} glyph={c.glyph} color={catColor(c.id)} title={c.label} chevron onClick={() => openSub(c.id === "medikamente" ? "medikamente" : `k/${c.id}`)} />
           ))}
           {metrics.map((m) => (
-            <Row key={m.id} glyph={m.glyph} color={catColor(m.cat)} title={m.label} sub={CATS.find((c) => c.id === m.cat)?.label} chevron onClick={() => openSub(m.id === "plan" ? "medikamente" : `m/${m.id}`)} />
+            <Row key={m.id} glyph={m.glyph} color={catColor(m.cat)} title={m.label} sub={CATS.find((c) => c.id === m.cat)?.label} chevron onClick={() => openSub(m.id === "plan" ? "tagesplan" : `m/${m.id}`)} />
           ))}
         </Group>
       ) : null}
-      {regs.length ? (
+      {regs.length || medHits.length ? (
         <Group header="Medikamente und Plan">
+          {medHits.map((it) => (
+            <Row key={it.key} glyph={glyphOf(it)} color={it.status === "aktuell" || it.status === "geplant" ? "var(--c-medikamente)" : "var(--label-3)"} title={it.name} sub={rowSub(it, now.day)} wrap chevron onClick={() => openSub(`medikamente/${it.key}`)} />
+          ))}
           {regs.map((r) => {
             const st = regimenStyle(r);
             return <Row key={r.id} glyph={st.glyph} color={st.color} title={r.name} sub={r.purpose || undefined} chevron onClick={() => openSub(`medikamente/${r.id}`)} />;

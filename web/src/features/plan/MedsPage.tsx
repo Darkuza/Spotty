@@ -1,5 +1,6 @@
-// Medikamente wie in Health: Tagesplan je Uhrzeit mit „Protokollieren“, deine Medikamente mit Stufenplan
+// Tagesplan und Protokoll: je Uhrzeit mit „Protokollieren“, die Mittel im Plan mit Stufenplan
 // und Vorrat, Messungen, Abstandsregeln (statt Wechselwirkungen) und pausierte Mittel.
+// Die Liste aller Medikamente mit Wirkstoffseiten steht unter „Medikamente“ (features/medications).
 
 import { useMemo, useState, type CSSProperties } from "react";
 import { useChecks, useEntries, usePhotos, usePlan, useRegimens, uncheckItem } from "../../lib/data";
@@ -101,7 +102,7 @@ export function MedsPage({ back }: { back: string }) {
 
   return (
     <Screen tint={catColor("medikamente")}>
-      <NavBar title="Medikamente" large back={back} trailing={<CircleButton icon="edit" label="Plan bearbeiten" onClick={() => sheets.open((close) => <PlanSheet onClose={close} />)} />} />
+      <NavBar title="Tagesplan" large back={back} trailing={<CircleButton icon="edit" label="Plan bearbeiten" onClick={() => sheets.open((close) => <PlanSheet onClose={close} />)} />} />
       <div className="sh">
         <h2>{label}</h2>
         <span className="sh-sub">{items.length ? `${done} von ${items.length}` : ""}</span>
@@ -178,8 +179,8 @@ export function MedsPage({ back }: { back: string }) {
       ) : null}
 
       {meds.length ? (
-        <section aria-label="Deine Medikamente">
-          <SectionHead title="Deine Medikamente" />
+        <section aria-label="Mittel im Plan">
+          <SectionHead title="Mittel im Plan" />
           <Group>
             {meds.map((r) => (
               <RegimenRow key={r.id} r={r} today={now.day} />
@@ -259,7 +260,7 @@ export function MedsPage({ back }: { back: string }) {
 }
 
 /** Leerzeichen zwischen Zahl und Einheit nicht umbrechen („15 mg“). */
-function keepUnits(s: string): string {
+export function keepUnits(s: string): string {
   return s.replace(/(\d) (?=[A-Za-zµÄÖÜäöü])/g, "$1\u00a0");
 }
 

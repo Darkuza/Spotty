@@ -1,0 +1,419 @@
+/* Spotty – Medikamente: Liste, Wirkstoffseite mit Foto, Strukturformel und Erklärung.
+   Die Strukturformeln (SVG aus tools/make-structures.py) tragen nur Klassen; die Farben kommen aus den
+   Farbwerten der App und passen sich so dem hellen und dunklen Modus an. */
+
+/* ---------- Strukturformeln ---------- */
+
+.mol {
+  --mol-n: var(--blue);
+  --mol-o: var(--red);
+  --mol-s: color-mix(in srgb, var(--yellow) 62%, var(--label));
+  --mol-x: var(--green-text);
+  --mol-p: var(--orange);
+  --mol-m: var(--purple);
+  display: block;
+  width: 100%;
+  height: auto;
+  color: var(--label);
+  overflow: visible;
+}
+
+.mol .b path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mol .b path.th {
+  stroke-width: 1.7;
+}
+
+.mol .b path.w {
+  fill: currentColor;
+  stroke-width: 1;
+}
+
+.mol .t path {
+  fill: currentColor;
+  stroke: none;
+}
+
+.mol .b path.n {
+  stroke: var(--mol-n);
+}
+.mol .b path.o {
+  stroke: var(--mol-o);
+}
+.mol .b path.s {
+  stroke: var(--mol-s);
+}
+.mol .b path.x {
+  stroke: var(--mol-x);
+}
+.mol .b path.p {
+  stroke: var(--mol-p);
+}
+.mol .b path.m {
+  stroke: var(--mol-m);
+}
+
+.mol .b path.w.n,
+.mol .t path.n {
+  fill: var(--mol-n);
+}
+.mol .b path.w.o,
+.mol .t path.o {
+  fill: var(--mol-o);
+}
+.mol .b path.w.s,
+.mol .t path.s {
+  fill: var(--mol-s);
+}
+.mol .b path.w.x,
+.mol .t path.x {
+  fill: var(--mol-x);
+}
+.mol .b path.w.p,
+.mol .t path.p {
+  fill: var(--mol-p);
+}
+.mol .b path.w.m,
+.mol .t path.m {
+  fill: var(--mol-m);
+}
+
+/* Hervorhebung eines Molekülteils (a orange, b blau) und die passenden Punkte der Legende */
+.mol,
+.mdot {
+  --hl-a: color-mix(in srgb, var(--orange) 48%, transparent);
+  --hl-b: color-mix(in srgb, var(--teal) 48%, transparent);
+}
+
+.mol .hl .ha,
+.mdot.a {
+  fill: var(--hl-a);
+}
+
+.mol .hl .hb,
+.mdot.b {
+  fill: var(--hl-b);
+}
+
+.mol .hl path,
+.mol .hl ellipse,
+.mol .hl circle {
+  stroke: none;
+}
+
+/* Beschriftung im Ionengitter (Natriumchlorid) */
+.mol .tx text {
+  fill: currentColor;
+  font-family: var(--font-ui);
+  font-size: 20px;
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+/* ---------- Kopf der Wirkstoffseite: Foto oder große Formel ---------- */
+
+.mhero {
+  margin: 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.mhero.image img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: var(--fill-3);
+}
+
+.mhero.formula {
+  padding: 16px 18px 10px;
+}
+
+.mhero.formula .mol {
+  max-height: 260px;
+}
+
+.mhero.glyph {
+  display: grid;
+  place-items: center;
+  height: 160px;
+  color: var(--c-medikamente);
+}
+
+.mol-wrap {
+  display: block;
+  margin-inline: auto;
+}
+
+.mhero-cap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 10px 16px 12px;
+  color: var(--label-2);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.mhero-what {
+  color: var(--label);
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.mhero-cap a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.mhead {
+  padding: 16px 16px 12px;
+}
+
+.mhead .lt {
+  margin: 0;
+}
+
+.mhead-sub {
+  margin: 2px 0 0;
+  color: var(--label-2);
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.mhead-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.mhead-tags .tagc {
+  margin: 0;
+}
+
+/* ---------- Dosis für Spotty ---------- */
+
+.mdose {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px 12px;
+}
+
+.mdose-k {
+  color: var(--label-2);
+  font-size: 13px;
+  line-height: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.mdose-v {
+  font-family: var(--font-num);
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mdose-s {
+  color: var(--label-2);
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.mdose + .mdose {
+  border-top: 0.5px solid var(--sep);
+}
+
+/* ---------- Erklärung ---------- */
+
+.mtext {
+  padding: 14px 16px;
+  font-size: 17px;
+  line-height: 24px;
+}
+
+.mtext p {
+  margin: 0;
+}
+
+.mtext p + p {
+  margin-top: 10px;
+}
+
+.msteps {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  counter-reset: ms;
+}
+
+.msteps li {
+  position: relative;
+  counter-increment: ms;
+  padding: 10px 16px 10px 52px;
+  font-size: 17px;
+  line-height: 23px;
+}
+
+.msteps li + li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 52px;
+  height: 0.5px;
+  background: var(--sep);
+}
+
+.msteps li::before {
+  content: counter(ms);
+  position: absolute;
+  top: 10px;
+  left: 16px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--c-medikamente) 16%, var(--surface));
+  color: var(--c-medikamente);
+  font-size: 14px;
+  line-height: 24px;
+  font-weight: 700;
+}
+
+.mbul {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.mbul li {
+  position: relative;
+  padding: 9px 16px 9px 34px;
+  font-size: 17px;
+  line-height: 23px;
+}
+
+.mbul li::before {
+  content: "";
+  position: absolute;
+  top: 17px;
+  left: 18px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-medikamente);
+}
+
+/* ---------- Molekül mit Legende ---------- */
+
+.mmol {
+  padding: 14px 16px 8px;
+}
+
+.mmol + .mmol {
+  padding-top: 8px;
+  border-top: 0.5px solid var(--sep);
+}
+
+.mmol-name {
+  margin: 0 0 6px;
+  color: var(--label-2);
+  font-size: 13px;
+  line-height: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.mmol .mol {
+  max-height: 250px;
+}
+
+.mmol-meta {
+  margin: 6px 0 0;
+  color: var(--label-2);
+  font-size: 13px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mmol-meta sub {
+  line-height: 0;
+}
+
+.mmol-note {
+  margin: 6px 0 0;
+  color: var(--label-2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.mleg {
+  list-style: none;
+  margin: 0;
+  padding: 10px 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mleg li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.mleg svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+}
+
+/* ---------- Quellen ---------- */
+
+.msrc {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.msrc a {
+  display: block;
+  padding: 11px 16px;
+  color: var(--blue);
+  font-size: 15px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.msrc li + li {
+  border-top: 0.5px solid var(--sep);
+}
+
+/* Plandetails unter der Erklärung: derselbe Abstand wie zwischen den Gruppen */
+.mplan > .grp,
+.mplan > section,
+.mplan + .grp,
+.mplan + section,
+.mplan + .mplan {
+  margin-top: 18px;
+}

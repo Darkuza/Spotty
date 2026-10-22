@@ -349,7 +349,7 @@ function PinnedCard({ id }: { id: string }) {
   const def = metricOf(id);
   const s = useSeries(def, src);
   if (!def || !s) return null;
-  return <MetricCard def={def} series={s} onClick={() => openSub(def.id === "plan" ? "medikamente" : `m/${def.id}`)} />;
+  return <MetricCard def={def} series={s} onClick={() => openSub(def.id === "plan" ? "tagesplan" : `m/${def.id}`)} />;
 }
 
 function Pinned() {
@@ -385,7 +385,7 @@ function Highlights() {
       {list.length ? (
         <div className="mcards">
           {list.slice(0, 2).map((h) => (
-            <HighlightCard key={h.id} hl={h} onClick={() => openSub(h.metric === "plan" ? "medikamente" : `m/${h.metric}`)} />
+            <HighlightCard key={h.id} hl={h} onClick={() => openSub(h.metric === "plan" ? "tagesplan" : `m/${h.metric}`)} />
           ))}
         </div>
       ) : (

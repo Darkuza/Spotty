@@ -38,6 +38,7 @@ const TITLES: [RegExp, string][] = [
   [/\/protokolle$/, "Tagesprotokolle"],
   [/\/protokolle\/[^/]+$/, "Tagesprotokoll"],
   [/\/medikamente(\/.*)?$/, "Medikamente"],
+  [/\/tagesplan$/, "Tagesplan"],
   [/\/m\/[^/]+\/daten$/, "Alle Daten"],
   [/\/m\/[^/]+$/, "Messwert"],
   [/\/k\/[^/]+$/, "Kategorie"],

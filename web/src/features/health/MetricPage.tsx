@@ -344,7 +344,7 @@ export function MetricDataPage({ id, back }: { id: string; back: string }) {
             const dv = s.days.get(d);
             return (
               <Group key={d} header={d === now.day ? "Heute" : fmtDateWd(d)}>
-                <Row title={`${fmt(dv?.given ?? 0)} von ${fmt(dv?.due ?? 0)} gegeben`} value={`${fmt(dv?.mid ?? 0)} %`} chevron onClick={() => openSub("medikamente")} />
+                <Row title={`${fmt(dv?.given ?? 0)} von ${fmt(dv?.due ?? 0)} gegeben`} value={`${fmt(dv?.mid ?? 0)} %`} chevron onClick={() => openSub("tagesplan")} />
               </Group>
             );
           })

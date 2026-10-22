@@ -125,7 +125,7 @@ export const ARTICLES: Article[] = [
         title: "Entdecken",
         items: [
           "Alle Messwerte nach Kategorien, darunter die Akte: Klinische Dokumente mit den Originalen, Tagesprotokolle mit den Papierfotos, Laborergebnisse, Erkrankungen, Unverträglichkeiten, Fragen an die Klinik und die Chronik.",
-          "„Medikamente“ zeigt den Tagesplan mit allen Uhrzeiten, die Mittel mit Stufenplan und Vorrat und die Abstandsregeln.",
+          "„Medikamente“ listet alle Mittel, die Spotty bekommt, bekommen soll oder bekommen hat. Ein Tipp öffnet die Seite des Mittels: Foto oder Strukturformel, Erklärung der Wirkung, aktuelle Dosis aus dem Plan, Stufenplan, Vorrat und die Belege aus der Akte. „Tagesplan und Protokoll“ oben in der Liste zeigt alle Uhrzeiten des Tages mit den Abstandsregeln.",
           "Jeder Messwert hat ein Diagramm für Tag, Woche, Monat, sechs Monate und Jahr. Einen Balken antippen zeigt den Wert; zur Seite wischen blättert zurück.",
         ],
       },

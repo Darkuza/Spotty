@@ -35,7 +35,7 @@ export function AllDataPage({ back }: { back: string }) {
       <h1 className="lt">Alle Daten</h1>
       <Group>
         {withData.map(({ m, latest }) => (
-          <Row key={m.id} glyph={m.glyph} color={catColor(m.cat)} title={m.label} sub={latest ? `${latest.value} ${latest.unit}`.trim() : undefined} value={latest ? fmtWhen(latest.day, latest.time, now.day) : undefined} chevron onClick={() => openSub(m.id === "plan" ? "medikamente" : `m/${m.id}`)} />
+          <Row key={m.id} glyph={m.glyph} color={catColor(m.cat)} title={m.label} sub={latest ? `${latest.value} ${latest.unit}`.trim() : undefined} value={latest ? fmtWhen(latest.day, latest.time, now.day) : undefined} chevron onClick={() => openSub(m.id === "plan" ? "tagesplan" : `m/${m.id}`)} />
         ))}
       </Group>
       <Group header="Auswerten und teilen">
@@ -100,7 +100,7 @@ export function HighlightsPage({ back }: { back: string }) {
       {list.length ? (
         <div className="mcards">
           {list.map((h) => (
-            <HighlightCard key={h.id} hl={h} onClick={() => openSub(h.metric === "plan" ? "medikamente" : `m/${h.metric}`)} />
+            <HighlightCard key={h.id} hl={h} onClick={() => openSub(h.metric === "plan" ? "tagesplan" : `m/${h.metric}`)} />
           ))}
         </div>
       ) : (
